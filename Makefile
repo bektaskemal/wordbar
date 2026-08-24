@@ -11,7 +11,7 @@
 PREFIX      ?= $(HOME)/.local
 BINDIR      ?= $(PREFIX)/bin
 DATADIR     ?= $(PREFIX)/share
-EXTENSION_UUID = wordbar@node-robotics.info
+EXTENSION_UUID = wordbar@kemalbektas.dev
 EXTENSIONDIR ?= $(DATADIR)/gnome-shell/extensions/$(EXTENSION_UUID)
 
 CARGO       ?= cargo

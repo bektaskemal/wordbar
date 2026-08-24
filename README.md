@@ -69,7 +69,7 @@ Needs a Rust toolchain, `libgtk-4-dev` and `libadwaita-1-dev`.
 
 ```bash
 make install                       # into ~/.local by default
-gnome-extensions enable wordbar@node-robotics.info
+gnome-extensions enable wordbar@kemalbektas.dev
 ```
 
 Log out and back in first (GNOME Shell only picks up new extensions and
