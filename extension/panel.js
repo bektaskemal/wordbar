@@ -18,8 +18,16 @@ import {ellipsize} from './terms.js';
 
 /** Shown while the backend is unreachable (Phase 25). */
 const UNAVAILABLE_TEXT = '—';
-/** Shown when the vocabulary is empty. */
-const EMPTY_TEXT = _('+ word');
+
+/**
+ * Shown when the vocabulary is empty.
+ *
+ * Resolved lazily on purpose: gettext identifies the calling extension from
+ * the stack, so it throws while this module is still being evaluated.
+ */
+function emptyText() {
+    return _('+ word');
+}
 
 export const WordbarIndicator = GObject.registerClass({
     GTypeName: 'WordbarIndicator',
@@ -177,7 +185,7 @@ export const WordbarIndicator = GObject.registerClass({
             return;
         }
         if (!this._word) {
-            this._label.text = EMPTY_TEXT;
+            this._label.text = emptyText();
             return;
         }
         this._label.text = ellipsize(this._word.term, this._maxChars);

@@ -36,6 +36,7 @@ test-rust:
 	$(CARGO) test --workspace
 
 test-extension:
+	./scripts/check-extension.sh
 	gjs -m extension/test/terms-test.js
 
 ## e2e: prove the backend over a private session bus (Phase 10)
