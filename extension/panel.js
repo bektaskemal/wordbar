@@ -66,14 +66,13 @@ export const WordbarIndicator = GObject.registerClass({
     }
 
     _buildMenu() {
-        const cardItem = new PopupMenu.PopupBaseMenuItem({
-            reactive: false,
-            can_focus: false,
-            style_class: 'wordbar-card-item',
-        });
+        // Added straight to the menu box, not wrapped in a PopupBaseMenuItem.
+        // A non-reactive menu item carries .popup-inactive-menu-item and, being
+        // non-reactive, also :insensitive -- which the Shell theme paints
+        // #9a9a9a, dimming every label in the card. Plain children inherit the
+        // normal #ffffff popup text colour, matching the top bar.
         this._card = new WordCard();
-        cardItem.add_child(this._card);
-        this.menu.addMenuItem(cardItem);
+        this.menu.box.add_child(this._card);
 
         this._card.connect('rated-again', () => this._emitForWord('rated-again'));
         this._card.connect('rated-know', () => this._emitForWord('rated-know'));
@@ -87,12 +86,10 @@ export const WordbarIndicator = GObject.registerClass({
         // one.
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const footer = new PopupMenu.PopupBaseMenuItem({
-            reactive: false,
-            can_focus: false,
-            style_class: 'wordbar-footer-item',
+        const footerBox = new St.BoxLayout({
+            style_class: 'wordbar-footer',
+            x_expand: true,
         });
-        const footerBox = new St.BoxLayout({x_expand: true});
 
         const addButton = new St.Button({
             style_class: 'wordbar-footer-button',
@@ -115,8 +112,7 @@ export const WordbarIndicator = GObject.registerClass({
         });
         moreButton.connect('clicked', () => this._toggleMoreMenu());
         footerBox.add_child(moreButton);
-        footer.add_child(footerBox);
-        this.menu.addMenuItem(footer);
+        this.menu.box.add_child(footerBox);
 
         // Secondary actions live behind "⋮" so the primary card stays clean.
         this._moreSection = new PopupMenu.PopupMenuSection();

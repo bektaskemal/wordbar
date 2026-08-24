@@ -11,13 +11,13 @@
 
 /* -- popup card -------------------------------------------------------- */
 
-.wordbar-card-item {
-    padding: 6px 12px 2px 12px;
-}
-
+/* The card and footer sit directly in the menu box, so they carry their own
+ * padding -- a PopupBaseMenuItem would have supplied it, at the cost of
+ * dimming every label to the theme's insensitive colour. */
 .wordbar-card {
     min-width: 300px;
     spacing: 4px;
+    padding: 6px 12px 2px 12px;
 }
 
 .wordbar-card-header {
@@ -100,7 +100,7 @@
 
 /* -- footer ------------------------------------------------------------ */
 
-.wordbar-footer-item {
+.wordbar-footer {
     padding: 2px 12px 6px 12px;
 }
 
