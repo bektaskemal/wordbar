@@ -174,11 +174,19 @@ export default class WordbarExtension extends Extension {
         }
     }
 
+    /**
+     * Re-read one word, used when enrichment fills in its definition.
+     *
+     * The panel can advance while this request is in flight: rating a word
+     * emits WordUpdated for it and only then CurrentWordChanged for its
+     * replacement. So the reply is dropped unless that word is still the one
+     * on screen -- otherwise a rating visibly reverts to the word just rated.
+     */
     async _refreshDetails(id) {
         try {
             const word = await this._backend.getWordDetails(id);
-            if (word)
-                this._indicator?.setWord(word);
+            if (word && this._indicator?.currentWord?.id === id)
+                this._indicator.setWord(word);
         } catch (error) {
             this._logFailure('refreshing word details', error);
         }
@@ -324,6 +332,8 @@ export default class WordbarExtension extends Extension {
     }
 
     _logFailure(what, error) {
-        console.debug(`Wordbar: ${what} failed: ${error?.message ?? error}`);
+        // console.warn, not debug: warnings reach the journal, and an
+        // extension failure with no visible trace is close to undebuggable.
+        console.warn(`Wordbar: ${what} failed: ${error?.message ?? error}`);
     }
 }

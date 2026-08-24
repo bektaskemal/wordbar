@@ -58,26 +58,44 @@
     padding: 8px 0 4px 0;
 }
 
+/* Mid-grey with alpha reads correctly on both the light and dark Shell
+ * themes, unlike a hardcoded white or black. The earlier 0.15 alpha and
+ * missing border left the buttons looking disabled. */
 .wordbar-action {
-    padding: 6px 10px;
-    border-radius: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
     text-align: center;
-    background-color: rgba(128, 128, 128, 0.15);
+    font-weight: bold;
+    border: 1px solid rgba(127, 127, 127, 0.45);
+    background-color: rgba(127, 127, 127, 0.28);
 }
 
 .wordbar-action:hover,
 .wordbar-action:focus {
-    background-color: rgba(128, 128, 128, 0.3);
+    background-color: rgba(127, 127, 127, 0.45);
+    border-color: rgba(127, 127, 127, 0.7);
+}
+
+.wordbar-action:active {
+    background-color: rgba(127, 127, 127, 0.6);
+}
+
+/* Know is the common answer, so it carries the accent. */
+.wordbar-action-know {
+    border-color: rgba(53, 132, 228, 0.6);
+    background-color: rgba(53, 132, 228, 0.35);
 }
 
 .wordbar-action-know:hover,
 .wordbar-action-know:focus {
-    background-color: rgba(60, 160, 90, 0.35);
+    background-color: rgba(53, 132, 228, 0.55);
+    border-color: rgba(53, 132, 228, 0.9);
 }
 
 .wordbar-action-again:hover,
 .wordbar-action-again:focus {
-    background-color: rgba(200, 110, 60, 0.35);
+    background-color: rgba(200, 110, 60, 0.5);
+    border-color: rgba(200, 110, 60, 0.8);
 }
 
 /* -- footer ------------------------------------------------------------ */

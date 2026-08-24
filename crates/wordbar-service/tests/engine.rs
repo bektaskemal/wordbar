@@ -34,7 +34,56 @@ fn adding_a_word_signals_it_and_marks_the_vocabulary_changed() {
 
     assert_eq!(outcome.effects.word_added, Some(outcome.value.id));
     assert!(outcome.effects.vocabulary_changed);
-    assert!(outcome.effects.current_word_changed.is_none());
+    // The panel was empty, so this capture also becomes the panel word; see
+    // the_first_capture_fills_an_empty_panel.
+    assert_eq!(
+        outcome.effects.current_word_changed,
+        Some(Some(outcome.value.id))
+    );
+}
+
+#[test]
+fn the_first_capture_fills_an_empty_panel() {
+    let mut e = engine();
+    assert!(e.current_word(t0()).unwrap().value.is_none());
+
+    let outcome = e.add_word("ephemeral", t0()).unwrap();
+    let id = outcome.value.id;
+
+    // Without this the panel keeps its empty state until the next rotation
+    // tick, which reads as the capture having silently failed.
+    assert_eq!(
+        outcome.effects.current_word_changed,
+        Some(Some(id)),
+        "a capture into an empty rotation must announce the new panel word"
+    );
+    assert_eq!(e.current_word_id().unwrap(), Some(id));
+}
+
+#[test]
+fn a_later_capture_does_not_hijack_the_panel() {
+    let mut e = engine();
+    let first = add(&mut e, "ephemeral");
+    e.current_word(t0()).unwrap();
+
+    let outcome = e.add_word("ubiquitous", t0()).unwrap();
+    assert_eq!(
+        outcome.effects.current_word_changed, None,
+        "capturing while a word is showing must not interrupt it"
+    );
+    assert_eq!(e.current_word_id().unwrap(), Some(first));
+}
+
+#[test]
+fn restoring_the_only_word_refills_an_empty_panel() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    e.current_word(t0()).unwrap();
+    e.mark_learned(id, t0()).unwrap();
+    assert!(e.current_word(t0()).unwrap().value.is_none());
+
+    let outcome = e.restore_word(id, t0()).unwrap();
+    assert_eq!(outcome.effects.current_word_changed, Some(Some(id)));
 }
 
 #[test]

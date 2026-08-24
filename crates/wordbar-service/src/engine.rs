@@ -108,16 +108,23 @@ impl Engine {
 
     /// Capture a term. Duplicates are reported, never silently created.
     pub fn add_word(&mut self, text: &str, now: DateTime<Utc>) -> Result<Outcome<Word>> {
-        let word = self.store.add_word(NewWord::term(text), now)?;
-        let id = word.id;
-        Ok(Outcome::new(word, Effects::added(id)))
+        self.add_word_full(NewWord::term(text), now)
     }
 
     /// Import path: a term that may already arrive with dictionary data.
     pub fn add_word_full(&mut self, new: NewWord, now: DateTime<Utc>) -> Result<Outcome<Word>> {
         let word = self.store.add_word(new, now)?;
         let id = word.id;
-        Ok(Outcome::new(word, Effects::added(id)))
+        let mut effects = Effects::added(id);
+
+        // A capture into an empty rotation has to show up straight away.
+        // Without this the panel keeps its empty state until the next
+        // rotation tick, which looks like the capture silently failed.
+        if self.store.current_word_id()?.is_none() {
+            effects = effects.merge(self.advance_display(now)?.effects);
+        }
+
+        Ok(Outcome::new(word, effects))
     }
 
     pub fn get_word(&self, id: WordId) -> Result<Word> {
@@ -167,7 +174,14 @@ impl Engine {
 
     pub fn restore_word(&mut self, id: WordId, now: DateTime<Utc>) -> Result<Outcome<Word>> {
         let word = self.store.restore_word(id, now)?;
-        Ok(Outcome::new(word, Effects::updated(id)))
+        let mut effects = Effects::updated(id);
+
+        // Restoring the only word likewise has to refill an empty panel.
+        if self.store.current_word_id()?.is_none() {
+            effects = effects.merge(self.advance_display(now)?.effects);
+        }
+
+        Ok(Outcome::new(word, effects))
     }
 
     pub fn delete_word(&mut self, id: WordId) -> Result<Outcome<()>> {
