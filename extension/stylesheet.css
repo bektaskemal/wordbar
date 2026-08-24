@@ -1,0 +1,152 @@
+/* Wordbar — panel, popup and toast styling.
+ *
+ * Colours come from the Shell's own theme variables where possible so the
+ * extension follows light/dark and accent-colour changes.
+ */
+
+.wordbar-panel-label {
+    font-weight: 500;
+    padding: 0 4px;
+}
+
+/* -- popup card -------------------------------------------------------- */
+
+.wordbar-card-item {
+    padding: 6px 12px 2px 12px;
+}
+
+.wordbar-card {
+    min-width: 300px;
+    spacing: 4px;
+}
+
+.wordbar-card-header {
+    spacing: 8px;
+}
+
+.wordbar-term {
+    font-size: 1.25em;
+    font-weight: bold;
+}
+
+.wordbar-part-of-speech {
+    font-size: 0.85em;
+    font-style: italic;
+    opacity: 0.7;
+    padding-bottom: 4px;
+}
+
+.wordbar-definition {
+    padding-bottom: 2px;
+}
+
+.wordbar-definition-missing {
+    font-style: italic;
+    opacity: 0.6;
+}
+
+.wordbar-example {
+    font-style: italic;
+    opacity: 0.75;
+    padding-bottom: 4px;
+}
+
+/* -- actions ----------------------------------------------------------- */
+
+.wordbar-actions {
+    spacing: 6px;
+    padding: 8px 0 4px 0;
+}
+
+.wordbar-action {
+    padding: 6px 10px;
+    border-radius: 6px;
+    text-align: center;
+    background-color: rgba(128, 128, 128, 0.15);
+}
+
+.wordbar-action:hover,
+.wordbar-action:focus {
+    background-color: rgba(128, 128, 128, 0.3);
+}
+
+.wordbar-action-know:hover,
+.wordbar-action-know:focus {
+    background-color: rgba(60, 160, 90, 0.35);
+}
+
+.wordbar-action-again:hover,
+.wordbar-action-again:focus {
+    background-color: rgba(200, 110, 60, 0.35);
+}
+
+/* -- footer ------------------------------------------------------------ */
+
+.wordbar-footer-item {
+    padding: 2px 12px 6px 12px;
+}
+
+.wordbar-footer-button {
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
+.wordbar-footer-button:hover,
+.wordbar-footer-button:focus {
+    background-color: rgba(128, 128, 128, 0.2);
+}
+
+.wordbar-icon-button {
+    padding: 4px;
+    border-radius: 99px;
+}
+
+.wordbar-icon-button:hover,
+.wordbar-icon-button:focus {
+    background-color: rgba(128, 128, 128, 0.25);
+}
+
+.wordbar-link-button {
+    padding: 2px 0;
+    font-size: 0.9em;
+    color: #78aeed;
+}
+
+.wordbar-link-button:hover,
+.wordbar-link-button:focus {
+    text-decoration: underline;
+}
+
+/* -- add dialog -------------------------------------------------------- */
+
+.wordbar-add-entry {
+    min-width: 260px;
+    margin-top: 12px;
+}
+
+/* -- toast ------------------------------------------------------------- */
+
+.wordbar-toast {
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 10px 14px;
+    spacing: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.wordbar-toast-label {
+    font-weight: 500;
+}
+
+.wordbar-toast-action {
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-weight: bold;
+    color: #78aeed;
+}
+
+.wordbar-toast-action:hover,
+.wordbar-toast-action:focus {
+    background-color: rgba(255, 255, 255, 0.15);
+}

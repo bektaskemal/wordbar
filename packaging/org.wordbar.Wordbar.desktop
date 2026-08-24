@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Wordbar
+GenericName=Vocabulary Manager
+Comment=Review the vocabulary you capture from the GNOME top bar
+Exec=wordbar-app
+Icon=accessories-dictionary
+Terminal=false
+Categories=Education;Languages;Utility;
+Keywords=vocabulary;dictionary;words;learning;spaced repetition;
+StartupNotify=true
+StartupWMClass=wordbar-app

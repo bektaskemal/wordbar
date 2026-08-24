@@ -1,0 +1,10 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# GNOME Shell extension build artefacts
+extension/schemas/gschemas.compiled
+
+# Editors and OS
+*.swp
+.DS_Store

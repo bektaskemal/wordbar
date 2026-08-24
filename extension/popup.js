@@ -1,0 +1,146 @@
+/* popup.js — the answer to the panel's prompt.
+ *
+ * The panel word is the recall test; opening this popup reveals the meaning
+ * immediately. There is deliberately no "show definition" step.
+ */
+
+import Clutter from 'gi://Clutter';
+import GObject from 'gi://GObject';
+import St from 'gi://St';
+
+import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+
+/**
+ * The word card: term, part of speech, definition, example, and the three
+ * learning actions.
+ */
+export const WordCard = GObject.registerClass({
+    GTypeName: 'WordbarWordCard',
+    Signals: {
+        'rated-again': {},
+        'rated-know': {},
+        'marked-learned': {},
+        'speak-requested': {},
+        'edit-requested': {},
+    },
+}, class WordCard extends St.BoxLayout {
+    _init() {
+        super._init({
+            style_class: 'wordbar-card',
+            vertical: true,
+            x_expand: true,
+        });
+
+        const header = new St.BoxLayout({style_class: 'wordbar-card-header', x_expand: true});
+        this._term = new St.Label({style_class: 'wordbar-term', x_expand: true});
+        this._term.clutter_text.line_wrap = true;
+        header.add_child(this._term);
+
+        // Pronunciation is best-effort (Phase 19): the button only appears
+        // when the service actually gave us something to speak.
+        this._speaker = new St.Button({
+            style_class: 'wordbar-icon-button',
+            child: new St.Icon({icon_name: 'audio-speakers-symbolic', icon_size: 16}),
+            y_align: Clutter.ActorAlign.CENTER,
+            can_focus: true,
+        });
+        this._speaker.connect('clicked', () => this.emit('speak-requested'));
+        header.add_child(this._speaker);
+        this.add_child(header);
+
+        this._partOfSpeech = new St.Label({style_class: 'wordbar-part-of-speech'});
+        this.add_child(this._partOfSpeech);
+
+        this._definition = new St.Label({style_class: 'wordbar-definition'});
+        this._definition.clutter_text.line_wrap = true;
+        this.add_child(this._definition);
+
+        this._example = new St.Label({style_class: 'wordbar-example'});
+        this._example.clutter_text.line_wrap = true;
+        this.add_child(this._example);
+
+        // Offered instead of an example when enrichment produced nothing, so
+        // an offline capture is still a usable card.
+        this._addDefinition = new St.Button({
+            style_class: 'wordbar-link-button',
+            label: _('Add definition'),
+            x_align: Clutter.ActorAlign.START,
+            can_focus: true,
+        });
+        this._addDefinition.connect('clicked', () => this.emit('edit-requested'));
+        this.add_child(this._addDefinition);
+
+        const actions = new St.BoxLayout({style_class: 'wordbar-actions', x_expand: true});
+        this._again = this._actionButton(_('Again'), 'wordbar-action-again', 'rated-again');
+        this._know = this._actionButton(_('Know'), 'wordbar-action-know', 'rated-know');
+        this._learned = this._actionButton(_('Learned'), 'wordbar-action-learned', 'marked-learned');
+        for (const button of [this._again, this._know, this._learned])
+            actions.add_child(button);
+        this.add_child(actions);
+
+        this._word = null;
+    }
+
+    _actionButton(label, styleClass, signal) {
+        const button = new St.Button({
+            style_class: `wordbar-action ${styleClass}`,
+            label,
+            x_expand: true,
+            can_focus: true,
+        });
+        button.connect('clicked', () => this.emit(signal));
+        return button;
+    }
+
+    get word() {
+        return this._word;
+    }
+
+    /** Render a word, or the empty state when passed null. */
+    setWord(word) {
+        this._word = word;
+
+        if (!word) {
+            this._term.text = _('No words yet');
+            this._partOfSpeech.visible = false;
+            this._definition.text =
+                _('Select a word and press Super+Shift+V to add it.');
+            this._definition.visible = true;
+            this._example.visible = false;
+            this._addDefinition.visible = false;
+            this._speaker.visible = false;
+            this._setActionsEnabled(false);
+            return;
+        }
+
+        this._term.text = word.term;
+        this._setActionsEnabled(true);
+
+        const partOfSpeech = word.part_of_speech || '';
+        this._partOfSpeech.text = partOfSpeech;
+        this._partOfSpeech.visible = partOfSpeech !== '';
+
+        const definition = word.definition || '';
+        // Phase 18: a word with no definition is still perfectly usable.
+        this._definition.text = definition || _('Definition unavailable');
+        this._definition.visible = true;
+        this._definition.style_class = definition
+            ? 'wordbar-definition'
+            : 'wordbar-definition wordbar-definition-missing';
+
+        const example = word.example || '';
+        this._example.text = example;
+        this._example.visible = example !== '';
+
+        this._addDefinition.visible = definition === '';
+        this._speaker.visible = Boolean(word.phonetic);
+    }
+
+    _setActionsEnabled(enabled) {
+        for (const button of [this._again, this._know, this._learned]) {
+            button.reactive = enabled;
+            button.can_focus = enabled;
+            button.opacity = enabled ? 255 : 128;
+        }
+    }
+});

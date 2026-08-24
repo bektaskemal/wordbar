@@ -1,0 +1,76 @@
+# Test matrix
+
+Four layers, tested independently (Phase 27).
+
+## 1. Rust unit tests — `cargo test -p wordbar-core`
+
+| Area | Where |
+|---|---|
+| normalization | `crates/wordbar-core/src/normalize.rs` |
+| FSRS mapping | `crates/wordbar-core/src/scheduler.rs` |
+| display selector | `crates/wordbar-core/src/select.rs` |
+| dictionary parsing | `crates/wordbar-service/src/dict/free_dictionary.rs` |
+| import/export | `crates/wordbar-service/src/exchange.rs` |
+
+## 2. Storage and engine — `cargo test -p wordbar-service`
+
+| Area | Where |
+|---|---|
+| add, duplicates, edit, delete, search | `tests/storage.rs` |
+| learned/restore keeping FSRS state | `tests/storage.rs`, `tests/engine.rs` |
+| display is not a review | `tests/engine.rs` |
+| `current` is read-only, `next` rotates | `tests/engine.rs` |
+| the full add → rate → learn → restore workflow | `tests/engine.rs` |
+| reopening the database | `tests/storage.rs` |
+
+## 3. D-Bus and CLI — `make e2e`
+
+`scripts/e2e-backend.sh` runs on a private session bus against a throwaway
+database, so it never touches your real vocabulary. It covers:
+
+* activation — the bus starts the service, nothing else does
+* the documented CLI workflow end to end
+* plain, JSON and Waybar output shapes
+* exit codes for duplicates, missing words and an empty vocabulary
+* import/export round trip, and that exports carry no scheduler internals
+* restart resilience — the bus re-activates and the data survives
+
+## 4. GNOME Shell — manual
+
+Automated Shell testing needs a live session, so this list is run by hand
+before a release. On Wayland, log out and back in between builds; on X11,
+`Alt+F2` → `r` is enough.
+
+- [ ] the panel word appears after enabling the extension
+- [ ] with an empty vocabulary the panel shows `+ word` and the popup explains capture
+- [ ] with the service stopped the panel shows `—` and the Shell stays responsive
+- [ ] the panel recovers on its own once the service is reachable again
+- [ ] clicking the word shows the definition immediately, with no second click
+- [ ] a word with no definition shows "Definition unavailable" and an "Add definition" link
+- [ ] rotation advances the word after the configured interval
+- [ ] rotation does **not** change the word while its popup is open
+- [ ] closing the popup after a deferred rotation advances exactly once
+- [ ] `Again`, `Know` and `Learned` each record and advance
+- [ ] `Learned` shows a confirmation with a working Undo
+- [ ] `Super+Shift+V` on a PRIMARY selection saves silently and confirms
+- [ ] `Super+Shift+V` with no selection but a plausible clipboard opens a prefilled dialog
+- [ ] `Super+Shift+V` on a long paragraph opens an editable dialog rather than saving
+- [ ] capturing a duplicate says so and does not create a second entry
+- [ ] Undo on a capture removes the word
+- [ ] a captured word gains its definition shortly afterwards (online)
+- [ ] with networking off, capture still succeeds and the word stays usable
+- [ ] changing the rotation interval in preferences takes effect without a restart
+- [ ] turning off "Show word in top bar" removes the indicator
+- [ ] rebinding the capture shortcut works and the old binding stops firing
+- [ ] disabling the extension removes the indicator, the timer and the keybinding
+
+## 5. GTK manager — manual
+
+- [ ] the vocabulary list loads, searches and shows `N active · M learned`
+- [ ] switching to Learned shows archived words with a Restore action
+- [ ] editing a word updates it and the panel picks the change up
+- [ ] deleting asks first, then removes the word
+- [ ] a word captured from the Shell appears in the list without a manual reload
+- [ ] import accepts `word`, `word,definition` and the full CSV row
+- [ ] export writes JSON or CSV depending on the chosen filename
+- [ ] with the service unreachable, the window shows an error toast rather than hanging

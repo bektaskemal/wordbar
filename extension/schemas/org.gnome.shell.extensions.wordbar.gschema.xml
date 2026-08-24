@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="wordbar">
+  <schema id="org.gnome.shell.extensions.wordbar"
+          path="/org/gnome/shell/extensions/wordbar/">
+
+    <key name="show-in-top-bar" type="b">
+      <default>true</default>
+      <summary>Show word in top bar</summary>
+      <description>Whether the current word is displayed in the GNOME top bar.</description>
+    </key>
+
+    <key name="rotation-minutes" type="i">
+      <default>15</default>
+      <range min="1" max="1440"/>
+      <summary>Change word every (minutes)</summary>
+      <description>How long a word stays in the panel before Wordbar rotates to the next one.</description>
+    </key>
+
+    <key name="capture-shortcut" type="as">
+      <default><![CDATA[['<Super><Shift>v']]]></default>
+      <summary>Quick capture shortcut</summary>
+      <description>Adds the current selection to the vocabulary.</description>
+    </key>
+
+    <key name="max-panel-chars" type="i">
+      <default>18</default>
+      <range min="6" max="60"/>
+      <summary>Maximum characters in the panel</summary>
+      <description>Longer terms are ellipsized so the top bar layout stays stable.</description>
+    </key>
+  </schema>
+</schemalist>

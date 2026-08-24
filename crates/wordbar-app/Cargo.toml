@@ -1,0 +1,27 @@
+[package]
+name = "wordbar-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Wordbar vocabulary manager and preferences"
+
+[[bin]]
+name = "wordbar-app"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+zbus.workspace = true
+
+# Pinned to the bindings that match GTK 4.14 / libadwaita 1.5, the versions
+# shipped by the distributions Wordbar targets (Ubuntu 24.04, Fedora 40).
+gtk = { package = "gtk4", version = "0.8", features = ["v4_10"] }
+adw = { package = "libadwaita", version = "0.6", features = ["v1_4"] }
+glib = "0.19"
+gio = "0.19"
+async-channel = "2"
+futures-util = { version = "0.3", default-features = false }
+tokio = { workspace = true }

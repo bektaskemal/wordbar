@@ -1,0 +1,648 @@
+//! The manager window: vocabulary and preferences.
+//!
+//! No decks, no tags, no learning dashboard — the product is a vocabulary
+//! list you can search and correct, plus the handful of settings that change
+//! how the panel behaves.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use adw::prelude::*;
+use gtk::glib;
+use gtk::glib::clone;
+
+use crate::client::Client;
+use crate::edit;
+use crate::word::Word;
+
+/// The extension's schema. Preferences are stored there so the panel picks
+/// changes up immediately, with no second source of truth.
+const SCHEMA_ID: &str = "org.gnome.shell.extensions.wordbar";
+const ROTATION_OPTIONS: [i32; 5] = [5, 10, 15, 30, 60];
+
+pub struct Ui {
+    client: Client,
+    toasts: adw::ToastOverlay,
+    list: gtk::ListBox,
+    status: gtk::Label,
+    search: gtk::SearchEntry,
+    empty: adw::StatusPage,
+    scroller: gtk::ScrolledWindow,
+    window: adw::ApplicationWindow,
+    /// Which slice of the vocabulary is on screen.
+    showing_learned: RefCell<bool>,
+    /// The words currently rendered, so row actions can resolve an id.
+    words: RefCell<Vec<Word>>,
+}
+
+pub fn build(app: &adw::Application, client: Client, page: &str) -> adw::ApplicationWindow {
+    let window = adw::ApplicationWindow::builder()
+        .application(app)
+        .title("Wordbar")
+        .default_width(560)
+        .default_height(640)
+        .build();
+
+    let stack = adw::ViewStack::new();
+    let toasts = adw::ToastOverlay::new();
+
+    let ui = Rc::new(Ui::new(client, toasts.clone(), window.clone()));
+
+    stack.add_titled_with_icon(
+        &ui.build_vocabulary_page(),
+        Some("vocabulary"),
+        "Vocabulary",
+        "view-list-symbolic",
+    );
+    stack.add_titled_with_icon(
+        &ui.build_preferences_page(),
+        Some("preferences"),
+        "Preferences",
+        "preferences-system-symbolic",
+    );
+    stack.set_visible_child_name(match page {
+        "preferences" => "preferences",
+        _ => "vocabulary",
+    });
+
+    let switcher = adw::ViewSwitcher::builder()
+        .stack(&stack)
+        .policy(adw::ViewSwitcherPolicy::Wide)
+        .build();
+    let header = adw::HeaderBar::builder().title_widget(&switcher).build();
+
+    toasts.set_child(Some(&stack));
+
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    content.append(&header);
+    content.append(&toasts);
+    toasts.set_vexpand(true);
+    window.set_content(Some(&content));
+
+    ui.install_actions();
+    ui.connect_change_signal();
+    ui.reload();
+
+    window
+}
+
+impl Ui {
+    fn new(client: Client, toasts: adw::ToastOverlay, window: adw::ApplicationWindow) -> Self {
+        let list = gtk::ListBox::builder()
+            .selection_mode(gtk::SelectionMode::None)
+            .build();
+        list.add_css_class("boxed-list");
+
+        Self {
+            client,
+            toasts,
+            list,
+            status: gtk::Label::builder().css_classes(["dim-label"]).build(),
+            search: gtk::SearchEntry::builder()
+                .placeholder_text("Search vocabulary…")
+                .hexpand(true)
+                .build(),
+            empty: adw::StatusPage::builder()
+                .icon_name("accessories-dictionary-symbolic")
+                .title("No words yet")
+                .description("Select a word anywhere and press Super+Shift+V to add it.")
+                .vexpand(true)
+                .build(),
+            scroller: gtk::ScrolledWindow::builder().vexpand(true).build(),
+            window,
+            showing_learned: RefCell::new(false),
+            words: RefCell::new(Vec::new()),
+        }
+    }
+
+    // -- vocabulary -------------------------------------------------------
+
+    fn build_vocabulary_page(self: &Rc<Self>) -> gtk::Widget {
+        let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        page.set_margin_top(12);
+        page.set_margin_bottom(12);
+        page.set_margin_start(12);
+        page.set_margin_end(12);
+
+        let controls = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        controls.append(&self.search);
+
+        // Active / Learned, so "restore learned" has somewhere to happen.
+        let switcher = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        switcher.add_css_class("linked");
+        let active_button = gtk::ToggleButton::with_label("Active");
+        let learned_button = gtk::ToggleButton::with_label("Learned");
+        learned_button.set_group(Some(&active_button));
+        active_button.set_active(true);
+        switcher.append(&active_button);
+        switcher.append(&learned_button);
+        controls.append(&switcher);
+
+        let add_button = gtk::Button::from_icon_name("list-add-symbolic");
+        add_button.set_tooltip_text(Some("Add a word"));
+        controls.append(&add_button);
+        page.append(&controls);
+
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        content.append(&self.list);
+        self.scroller.set_child(Some(&clamp(&content)));
+        page.append(&self.scroller);
+        page.append(&self.empty);
+        page.append(&self.status);
+
+        self.search
+            .connect_search_changed(clone!(@weak self as ui => move |_| ui.reload()));
+
+        learned_button.connect_toggled(clone!(@weak self as ui => move |button| {
+            *ui.showing_learned.borrow_mut() = button.is_active();
+            ui.reload();
+        }));
+
+        add_button.connect_clicked(clone!(@weak self as ui => move |_| ui.prompt_add()));
+
+        page.upcast()
+    }
+
+    fn filter(&self) -> &'static str {
+        if *self.showing_learned.borrow() {
+            "learned"
+        } else {
+            "active"
+        }
+    }
+
+    /// Refresh the list and the counters. Every call is asynchronous.
+    fn reload(self: &Rc<Self>) {
+        let ui = Rc::clone(self);
+        glib::spawn_future_local(async move {
+            let query = ui.search.text().to_string();
+            match ui.client.list(ui.filter(), &query).await {
+                Ok(words) => ui.show_words(&words, !query.is_empty()),
+                Err(err) => {
+                    ui.show_words(&[], false);
+                    ui.error(&err);
+                }
+            }
+
+            match ui.client.stats().await {
+                Ok((active, learned)) => {
+                    ui.status
+                        .set_text(&format!("{active} active · {learned} learned"));
+                }
+                Err(_) => ui.status.set_text(""),
+            }
+        });
+    }
+
+    fn show_words(self: &Rc<Self>, words: &[Word], searching: bool) {
+        *self.words.borrow_mut() = words.to_vec();
+        while let Some(child) = self.list.first_child() {
+            self.list.remove(&child);
+        }
+
+        if words.is_empty() {
+            self.scroller.set_visible(false);
+            self.empty.set_visible(true);
+            if searching {
+                self.empty.set_title("No matches");
+                self.empty.set_description(Some("Try a different search."));
+            } else if *self.showing_learned.borrow() {
+                self.empty.set_title("Nothing learned yet");
+                self.empty
+                    .set_description(Some("Words you mark as learned appear here."));
+            } else {
+                self.empty.set_title("No words yet");
+                self.empty.set_description(Some(
+                    "Select a word anywhere and press Super+Shift+V to add it.",
+                ));
+            }
+            return;
+        }
+
+        self.empty.set_visible(false);
+        self.scroller.set_visible(true);
+        for word in words {
+            self.list.append(&self.build_row(word));
+        }
+    }
+
+    fn build_row(self: &Rc<Self>, word: &Word) -> adw::ActionRow {
+        let row = adw::ActionRow::builder()
+            .title(glib::markup_escape_text(&word.term))
+            .subtitle(glib::markup_escape_text(&word.subtitle()))
+            .build();
+
+        if word.definition.is_empty() {
+            row.add_css_class("dim-label");
+        }
+
+        let menu = gio::Menu::new();
+        menu.append(Some("Edit…"), Some(&format!("word.edit({})", word.id)));
+        if word.learned {
+            menu.append(Some("Restore"), Some(&format!("word.restore({})", word.id)));
+        } else {
+            menu.append(
+                Some("Mark as learned"),
+                Some(&format!("word.learned({})", word.id)),
+            );
+        }
+        menu.append(Some("Delete"), Some(&format!("word.delete({})", word.id)));
+
+        let button = gtk::MenuButton::builder()
+            .icon_name("view-more-symbolic")
+            .valign(gtk::Align::Center)
+            .menu_model(&menu)
+            .build();
+        button.add_css_class("flat");
+        row.add_suffix(&button);
+
+        row
+    }
+
+    /// Wire the row menu actions once, on the window.
+    fn install_actions(self: &Rc<Self>) {
+        let group = gio::SimpleActionGroup::new();
+
+        let edit = gio::SimpleAction::new("edit", Some(glib::VariantTy::INT64));
+        edit.connect_activate(clone!(@weak self as ui => move |_, param| {
+            let Some(id) = param.and_then(|p| p.get::<i64>()) else { return };
+            let word = ui.words.borrow().iter().find(|w| w.id == id).cloned();
+            let Some(word) = word else { return };
+            let ui2 = Rc::clone(&ui);
+            edit::present(&ui.window, &word, move |fields| {
+                let ui3 = Rc::clone(&ui2);
+                glib::spawn_future_local(async move {
+                    match ui3.client.update(id, fields).await {
+                        Ok(w) => {
+                            ui3.toast(&format!("Updated “{}”", w.term));
+                            ui3.reload();
+                        }
+                        Err(err) => ui3.error(&err),
+                    }
+                });
+            });
+        }));
+        group.add_action(&edit);
+
+        let learned = gio::SimpleAction::new("learned", Some(glib::VariantTy::INT64));
+        learned.connect_activate(clone!(@weak self as ui => move |_, param| {
+            let Some(id) = param.and_then(|p| p.get::<i64>()) else { return };
+            glib::spawn_future_local(clone!(@weak ui => async move {
+                match ui.client.mark_learned(id).await {
+                    Ok(()) => {
+                        ui.toast_with_undo("Marked as learned", move |ui| ui.restore_word(id));
+                        ui.reload();
+                    }
+                    Err(err) => ui.error(&err),
+                }
+            }));
+        }));
+        group.add_action(&learned);
+
+        let restore = gio::SimpleAction::new("restore", Some(glib::VariantTy::INT64));
+        restore.connect_activate(clone!(@weak self as ui => move |_, param| {
+            let Some(id) = param.and_then(|p| p.get::<i64>()) else { return };
+            ui.restore_word(id);
+        }));
+        group.add_action(&restore);
+
+        let delete = gio::SimpleAction::new("delete", Some(glib::VariantTy::INT64));
+        delete.connect_activate(clone!(@weak self as ui => move |_, param| {
+            let Some(id) = param.and_then(|p| p.get::<i64>()) else { return };
+            let term = ui
+                .words
+                .borrow()
+                .iter()
+                .find(|w| w.id == id)
+                .map(|w| w.term.clone())
+                .unwrap_or_default();
+            ui.confirm_delete(id, &term);
+        }));
+        group.add_action(&delete);
+
+        self.window.insert_action_group("word", Some(&group));
+    }
+
+    fn restore_word(self: &Rc<Self>, id: i64) {
+        let ui = Rc::clone(self);
+        glib::spawn_future_local(async move {
+            match ui.client.restore(id).await {
+                Ok(()) => {
+                    ui.toast("Restored");
+                    ui.reload();
+                }
+                Err(err) => ui.error(&err),
+            }
+        });
+    }
+
+    /// Deletion drops review history too, so it always asks first.
+    fn confirm_delete(self: &Rc<Self>, id: i64, term: &str) {
+        let dialog = adw::MessageDialog::builder()
+            .transient_for(&self.window)
+            .modal(true)
+            .heading(format!("Delete “{term}”?"))
+            .body("This removes the word and its review history permanently.")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("delete", "Delete");
+        dialog.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("cancel"));
+
+        dialog.connect_response(
+            None,
+            clone!(@weak self as ui => move |_, response| {
+                if response != "delete" {
+                    return;
+                }
+                glib::spawn_future_local(clone!(@weak ui => async move {
+                    match ui.client.delete(id).await {
+                        Ok(()) => {
+                            ui.toast("Deleted");
+                            ui.reload();
+                        }
+                        Err(err) => ui.error(&err),
+                    }
+                }));
+            }),
+        );
+        dialog.present();
+    }
+
+    fn prompt_add(self: &Rc<Self>) {
+        let dialog = adw::MessageDialog::builder()
+            .transient_for(&self.window)
+            .modal(true)
+            .heading("Add word")
+            .build();
+        let entry = gtk::Entry::builder()
+            .placeholder_text("ephemeral")
+            .activates_default(true)
+            .build();
+        dialog.set_extra_child(Some(&entry));
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("add", "Add");
+        dialog.set_response_appearance("add", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("add"));
+
+        dialog.connect_response(
+            None,
+            clone!(@weak self as ui, @weak entry => move |_, response| {
+                if response != "add" {
+                    return;
+                }
+                let text = entry.text().trim().to_string();
+                if text.is_empty() {
+                    return;
+                }
+                glib::spawn_future_local(clone!(@weak ui => async move {
+                    match ui.client.add(&text).await {
+                        Ok(word) => {
+                            ui.toast(&format!("Added “{}”", word.term));
+                            ui.reload();
+                        }
+                        Err(err) => ui.error(&err),
+                    }
+                }));
+            }),
+        );
+        dialog.present();
+    }
+
+    // -- preferences ------------------------------------------------------
+
+    fn build_preferences_page(self: &Rc<Self>) -> gtk::Widget {
+        let page = adw::PreferencesPage::new();
+
+        match settings() {
+            Some(settings) => page.add(&self.build_panel_group(&settings)),
+            None => {
+                let group = adw::PreferencesGroup::builder()
+                    .title("Panel")
+                    .description(
+                        "The Wordbar GNOME Shell extension is not installed, so panel \
+                         settings are unavailable.",
+                    )
+                    .build();
+                page.add(&group);
+            }
+        }
+
+        page.add(&self.build_data_group());
+        page.upcast()
+    }
+
+    fn build_panel_group(self: &Rc<Self>, settings: &gio::Settings) -> adw::PreferencesGroup {
+        let group = adw::PreferencesGroup::builder().title("Panel").build();
+
+        let show = adw::SwitchRow::builder()
+            .title("Show word in top bar")
+            .build();
+        settings.bind("show-in-top-bar", &show, "active").build();
+        group.add(&show);
+
+        let options = gtk::StringList::new(
+            &ROTATION_OPTIONS
+                .iter()
+                .map(|m| format!("{m} minutes"))
+                .collect::<Vec<_>>()
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+        );
+        let rotation = adw::ComboRow::builder()
+            .title("Change word every")
+            .model(&options)
+            .build();
+        let current = settings.int("rotation-minutes");
+        let index = ROTATION_OPTIONS
+            .iter()
+            .position(|m| *m == current)
+            .unwrap_or(2) as u32;
+        rotation.set_selected(index);
+        rotation.connect_selected_notify(clone!(@strong settings => move |row| {
+            let minutes = ROTATION_OPTIONS
+                .get(row.selected() as usize)
+                .copied()
+                .unwrap_or(15);
+            let _ = settings.set_int("rotation-minutes", minutes);
+        }));
+        group.add(&rotation);
+
+        // Read-only here: rebinding a global shortcut belongs in the
+        // extension's own preferences, where the Shell can grab keys.
+        let shortcut = adw::ActionRow::builder()
+            .title("Capture shortcut")
+            .subtitle("Change it in the Wordbar extension preferences")
+            .build();
+        let accelerator = settings
+            .strv("capture-shortcut")
+            .first()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let label = gtk::ShortcutLabel::builder()
+            .accelerator(&accelerator)
+            .valign(gtk::Align::Center)
+            .build();
+        shortcut.add_suffix(&label);
+        group.add(&shortcut);
+
+        group
+    }
+
+    fn build_data_group(self: &Rc<Self>) -> adw::PreferencesGroup {
+        let group = adw::PreferencesGroup::builder()
+            .title("Data")
+            .description("Export carries your words only — never scheduling internals.")
+            .build();
+
+        let import = adw::ActionRow::builder()
+            .title("Import vocabulary…")
+            .build();
+        let import_button = gtk::Button::builder()
+            .label("Import")
+            .valign(gtk::Align::Center)
+            .build();
+        import_button.connect_clicked(clone!(@weak self as ui => move |_| ui.import()));
+        import.add_suffix(&import_button);
+        import.set_activatable_widget(Some(&import_button));
+        group.add(&import);
+
+        let export = adw::ActionRow::builder()
+            .title("Export vocabulary…")
+            .build();
+        let export_button = gtk::Button::builder()
+            .label("Export")
+            .valign(gtk::Align::Center)
+            .build();
+        export_button.connect_clicked(clone!(@weak self as ui => move |_| ui.export()));
+        export.add_suffix(&export_button);
+        export.set_activatable_widget(Some(&export_button));
+        group.add(&export);
+
+        group
+    }
+
+    fn import(self: &Rc<Self>) {
+        let dialog = gtk::FileDialog::builder()
+            .title("Import vocabulary")
+            .build();
+        dialog.set_filters(Some(&exchange_filters()));
+
+        let ui = Rc::clone(self);
+        dialog.open(Some(&self.window), gio::Cancellable::NONE, move |result| {
+            let Ok(file) = result else { return };
+            let Some(path) = file.path() else { return };
+            let format = format_for(&path);
+            glib::spawn_future_local(async move {
+                let data = match std::fs::read_to_string(&path) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        ui.error(&format!("Cannot read {}: {err}", path.display()));
+                        return;
+                    }
+                };
+                match ui.client.import(&data, format).await {
+                    Ok((added, duplicates, invalid)) => {
+                        ui.toast(&format!(
+                            "Imported {added}, skipped {duplicates} duplicate(s), \
+                                 {invalid} invalid"
+                        ));
+                        ui.reload();
+                    }
+                    Err(err) => ui.error(&err),
+                }
+            });
+        });
+    }
+
+    fn export(self: &Rc<Self>) {
+        let dialog = gtk::FileDialog::builder()
+            .title("Export vocabulary")
+            .initial_name("wordbar-vocabulary.json")
+            .build();
+        dialog.set_filters(Some(&exchange_filters()));
+
+        let ui = Rc::clone(self);
+        dialog.save(Some(&self.window), gio::Cancellable::NONE, move |result| {
+            let Ok(file) = result else { return };
+            let Some(path) = file.path() else { return };
+            let format = format_for(&path);
+            glib::spawn_future_local(async move {
+                match ui.client.export("all", format).await {
+                    Ok(data) => match std::fs::write(&path, data) {
+                        Ok(()) => ui.toast(&format!("Exported to {}", path.display())),
+                        Err(err) => ui.error(&format!("Cannot write {}: {err}", path.display())),
+                    },
+                    Err(err) => ui.error(&err),
+                }
+            });
+        });
+    }
+
+    // -- feedback ---------------------------------------------------------
+
+    fn toast(&self, message: &str) {
+        self.toasts.add_toast(adw::Toast::new(message));
+    }
+
+    fn toast_with_undo(self: &Rc<Self>, message: &str, undo: impl Fn(&Rc<Self>) + 'static) {
+        let toast = adw::Toast::new(message);
+        toast.set_button_label(Some("Undo"));
+        let ui = Rc::clone(self);
+        toast.connect_button_clicked(move |_| undo(&ui));
+        self.toasts.add_toast(toast);
+    }
+
+    fn error(&self, message: &str) {
+        let toast = adw::Toast::new(message);
+        toast.set_timeout(8);
+        self.toasts.add_toast(toast);
+    }
+
+    /// Captures made from the Shell should appear here without a manual reload.
+    fn connect_change_signal(self: &Rc<Self>) {
+        let changes = self.client.changes();
+        let ui = Rc::clone(self);
+        glib::spawn_future_local(async move {
+            while changes.recv().await.is_ok() {
+                ui.reload();
+            }
+        });
+    }
+}
+
+fn clamp(child: &impl IsA<gtk::Widget>) -> adw::Clamp {
+    adw::Clamp::builder().maximum_size(640).child(child).build()
+}
+
+fn exchange_filters() -> gio::ListStore {
+    let filters = gio::ListStore::new::<gtk::FileFilter>();
+
+    let json = gtk::FileFilter::new();
+    json.set_name(Some("JSON"));
+    json.add_suffix("json");
+    filters.append(&json);
+
+    let csv = gtk::FileFilter::new();
+    csv.set_name(Some("CSV"));
+    csv.add_suffix("csv");
+    filters.append(&csv);
+
+    filters
+}
+
+fn format_for(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("csv") => "csv",
+        _ => "json",
+    }
+}
+
+/// The extension's schema may not be installed; preferences degrade to a note
+/// rather than crashing the app.
+fn settings() -> Option<gio::Settings> {
+    gio::SettingsSchemaSource::default()?
+        .lookup(SCHEMA_ID, true)
+        .map(|_| gio::Settings::new(SCHEMA_ID))
+}

@@ -1,0 +1,19 @@
+[package]
+name = "wordbar-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Domain model, normalization, scheduling and selection logic for Wordbar"
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+rand.workspace = true
+rs-fsrs.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+unicode-normalization.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

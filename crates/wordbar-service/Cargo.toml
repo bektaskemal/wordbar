@@ -1,0 +1,30 @@
+[package]
+name = "wordbar-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Wordbar D-Bus service: SQLite storage, scheduling and dictionary enrichment"
+
+[[bin]]
+name = "wordbar-service"
+path = "src/main.rs"
+
+[dependencies]
+wordbar-core.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+zbus.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,10 @@
+{
+  "uuid": "wordbar@node-robotics.info",
+  "name": "Wordbar",
+  "description": "Keep one vocabulary word in the top bar and review it in place. Capture words with Super+Shift+V; the Wordbar service handles storage and spaced repetition.",
+  "shell-version": ["45", "46", "47", "48"],
+  "settings-schema": "org.gnome.shell.extensions.wordbar",
+  "gettext-domain": "wordbar",
+  "url": "https://code.node-robotics.info/wordbar",
+  "version": 1
+}
