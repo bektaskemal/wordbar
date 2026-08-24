@@ -71,7 +71,6 @@ export default class WordbarExtension extends Extension {
         indicator.connect('rated-again', (_i, id) => this._rate(id, 'rateAgain'));
         indicator.connect('rated-know', (_i, id) => this._rate(id, 'rateKnow'));
         indicator.connect('marked-learned', (_i, id) => this._markLearned(id));
-        indicator.connect('next-requested', () => this._advance());
         indicator.connect('add-requested', () => this._showAddDialog(''));
         indicator.connect('vocabulary-requested', () => this._openManager('openVocabulary'));
         indicator.connect('preferences-requested', () => this._openManager('openPreferences'));
@@ -194,8 +193,13 @@ export default class WordbarExtension extends Extension {
         }
     }
 
+    /**
+     * Rate the current word and show the next one in place.
+     *
+     * The popup deliberately stays open so several words can be reviewed in a
+     * row; `setWord` swaps both the panel label and the card.
+     */
     async _rate(id, method) {
-        this._indicator?.menu.close();
         try {
             const next = await this._backend[method](id);
             this._indicator?.setWord(next);
@@ -207,7 +211,6 @@ export default class WordbarExtension extends Extension {
     async _markLearned(id) {
         const word = this._indicator?.currentWord;
         const term = word?.term ?? '';
-        this._indicator?.menu.close();
 
         try {
             const next = await this._backend.markLearned(id);

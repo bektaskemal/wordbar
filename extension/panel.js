@@ -35,7 +35,6 @@ export const WordbarIndicator = GObject.registerClass({
         'rated-again': {param_types: [GObject.TYPE_INT64]},
         'rated-know': {param_types: [GObject.TYPE_INT64]},
         'marked-learned': {param_types: [GObject.TYPE_INT64]},
-        'next-requested': {},
         'add-requested': {},
         'vocabulary-requested': {},
         'preferences-requested': {},
@@ -82,10 +81,10 @@ export const WordbarIndicator = GObject.registerClass({
         this._card.connect('speak-requested', () => this._emitForWord('speak-requested'));
         this._card.connect('edit-requested', () => this._emitForWord('edit-requested'));
 
-        this._nextItem = new PopupMenu.PopupImageMenuItem(_('Next word'), 'go-next-symbolic');
-        this._nextItem.connect('activate', () => this.emit('next-requested'));
-        this.menu.addMenuItem(this._nextItem);
-
+        // No "Next word" item on purpose: all three ratings advance, and a real
+        // PopupMenuItem here would take the Shell's automatic selection
+        // highlight, making the least important action look like the primary
+        // one.
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         const footer = new PopupMenu.PopupBaseMenuItem({
@@ -167,7 +166,6 @@ export const WordbarIndicator = GObject.registerClass({
         this._word = word && word.term ? word : null;
         this._renderLabel();
         this._card.setWord(this._word);
-        this._nextItem.visible = this._word !== null;
     }
 
     /**
