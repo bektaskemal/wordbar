@@ -202,12 +202,18 @@ export default class WordbarExtension extends Extension {
     }
 
     /**
-     * Rate the current word and show the next one in place.
+     * Rate the current word and move to the next one.
      *
-     * The popup deliberately stays open so several words can be reviewed in a
-     * row; `setWord` swaps both the panel label and the card.
+     * The popup closes on purpose: the next word belongs in the top bar as a
+     * prompt, and revealing its meaning here would spend the recall test
+     * before it is asked.
      */
     async _rate(id, method) {
+        // The rating advances by itself, so a rotation deferred while the
+        // popup was open is already satisfied. Leaving it set would make
+        // closing the popup advance a second time and skip a word.
+        this._pendingRotation = false;
+        this._indicator?.menu.close();
         try {
             const next = await this._backend[method](id);
             this._indicator?.setWord(next);
@@ -219,6 +225,8 @@ export default class WordbarExtension extends Extension {
     async _markLearned(id) {
         const word = this._indicator?.currentWord;
         const term = word?.term ?? '';
+        this._pendingRotation = false;
+        this._indicator?.menu.close();
 
         try {
             const next = await this._backend.markLearned(id);
