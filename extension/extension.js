@@ -74,7 +74,8 @@ export default class WordbarExtension extends Extension {
         indicator.connect('add-requested', () => this._showAddDialog(''));
         indicator.connect('vocabulary-requested', () => this._openManager('openVocabulary'));
         indicator.connect('preferences-requested', () => this._openManager('openPreferences'));
-        indicator.connect('edit-requested', () => this._openManager('openVocabulary'));
+        // "Add definition" opens that word's editor, not the whole list.
+        indicator.connect('edit-requested', (_i, id) => this._editWord(id));
         indicator.connect('speak-requested', (_i, id) => this._speak(id));
 
         // Phase 12: never change the visible word while its popup is open.
@@ -304,6 +305,16 @@ export default class WordbarExtension extends Extension {
     }
 
     // -- misc -------------------------------------------------------------
+
+    async _editWord(id) {
+        this._indicator?.menu.close();
+        try {
+            await this._backend.openWordEditor(id);
+        } catch (error) {
+            showToast(_('Could not open the Wordbar manager.'));
+            this._logFailure('opening the word editor', error);
+        }
+    }
 
     async _openManager(method) {
         try {

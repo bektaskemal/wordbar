@@ -375,6 +375,15 @@ impl WordbarService {
         spawn_app(&["--page", "vocabulary"])
     }
 
+    /// Open the manager with this word's editor already showing, so a word
+    /// enrichment could not complete can be filled in without searching.
+    async fn open_word_editor(&self, id: i64) -> Result<(), ServiceError> {
+        let engine = self.engine.lock().await;
+        engine.get_word(id)?;
+        drop(engine);
+        spawn_app(&["--edit", &id.to_string()])
+    }
+
     /// Launch the manager on its preferences page.
     async fn open_preferences(&self) -> Result<(), ServiceError> {
         spawn_app(&["--page", "preferences"])
@@ -417,11 +426,19 @@ impl WordbarService {
 /// down the service, so this only ever reports an error to the caller.
 fn spawn_app(args: &[&str]) -> Result<(), ServiceError> {
     let binary = std::env::var("WORDBAR_APP").unwrap_or_else(|_| "wordbar-app".to_string());
-    std::process::Command::new(&binary)
+    let child = std::process::Command::new(&binary)
         .args(args)
         .spawn()
-        .map(|_| ())
-        .map_err(|e| ServiceError::Failed(format!("cannot start {binary}: {e}")))
+        .map_err(|e| ServiceError::Failed(format!("cannot start {binary}: {e}")))?;
+
+    // Reap it. The service outlives every manager window it starts, so without
+    // this each launch leaves a zombie behind for the rest of the session.
+    tokio::spawn(async move {
+        let mut child = child;
+        let _ = tokio::task::spawn_blocking(move || child.wait()).await;
+    });
+
+    Ok(())
 }
 
 fn insert(dict: &mut WordDict, key: &str, value: impl Into<Value<'static>>) {

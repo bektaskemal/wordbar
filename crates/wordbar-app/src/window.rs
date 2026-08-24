@@ -33,9 +33,15 @@ pub struct Ui {
     showing_learned: RefCell<bool>,
     /// The words currently rendered, so row actions can resolve an id.
     words: RefCell<Vec<Word>>,
+    /// Set once the pages are built, so a later launch can switch page.
+    stack: RefCell<Option<adw::ViewStack>>,
 }
 
-pub fn build(app: &adw::Application, client: Client, page: &str) -> adw::ApplicationWindow {
+pub fn build(
+    app: &adw::Application,
+    client: Client,
+    page: &str,
+) -> (adw::ApplicationWindow, Rc<Ui>) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Wordbar")
@@ -79,11 +85,18 @@ pub fn build(app: &adw::Application, client: Client, page: &str) -> adw::Applica
     toasts.set_vexpand(true);
     window.set_content(Some(&content));
 
+    *ui.stack.borrow_mut() = Some(stack.clone());
     ui.install_actions();
     ui.connect_change_signal();
     ui.reload();
 
-    window
+    (window, ui)
+}
+
+fn row_action(label: &str, action: &str, id: i64) -> gio::MenuItem {
+    let item = gio::MenuItem::new(Some(label), None);
+    item.set_action_and_target_value(Some(action), Some(&id.to_variant()));
+    item
 }
 
 impl Ui {
@@ -112,6 +125,7 @@ impl Ui {
             window,
             showing_learned: RefCell::new(false),
             words: RefCell::new(Vec::new()),
+            stack: RefCell::new(None),
         }
     }
 
@@ -236,17 +250,18 @@ impl Ui {
             row.add_css_class("dim-label");
         }
 
+        // Built with explicit target values, never with a detailed action
+        // string: "word.edit(3)" parses its target as int32, these actions take
+        // int64, and GTK silently drops an activation whose target type does
+        // not match -- so every row menu entry did nothing at all.
         let menu = gio::Menu::new();
-        menu.append(Some("Edit…"), Some(&format!("word.edit({})", word.id)));
+        menu.append_item(&row_action("Edit…", "word.edit", word.id));
         if word.learned {
-            menu.append(Some("Restore"), Some(&format!("word.restore({})", word.id)));
+            menu.append_item(&row_action("Restore", "word.restore", word.id));
         } else {
-            menu.append(
-                Some("Mark as learned"),
-                Some(&format!("word.learned({})", word.id)),
-            );
+            menu.append_item(&row_action("Mark as learned", "word.learned", word.id));
         }
-        menu.append(Some("Delete"), Some(&format!("word.delete({})", word.id)));
+        menu.append_item(&row_action("Delete", "word.delete", word.id));
 
         let button = gtk::MenuButton::builder()
             .icon_name("view-more-symbolic")
@@ -267,20 +282,10 @@ impl Ui {
         edit.connect_activate(clone!(@weak self as ui => move |_, param| {
             let Some(id) = param.and_then(|p| p.get::<i64>()) else { return };
             let word = ui.words.borrow().iter().find(|w| w.id == id).cloned();
-            let Some(word) = word else { return };
-            let ui2 = Rc::clone(&ui);
-            edit::present(&ui.window, &word, move |fields| {
-                let ui3 = Rc::clone(&ui2);
-                glib::spawn_future_local(async move {
-                    match ui3.client.update(id, fields).await {
-                        Ok(w) => {
-                            ui3.toast(&format!("Updated “{}”", w.term));
-                            ui3.reload();
-                        }
-                        Err(err) => ui3.error(&err),
-                    }
-                });
-            });
+            match word {
+                Some(word) => ui.present_editor(&word),
+                None => ui.edit_word(id),
+            }
         }));
         group.add_action(&edit);
 
@@ -321,6 +326,49 @@ impl Ui {
         group.add_action(&delete);
 
         self.window.insert_action_group("word", Some(&group));
+    }
+
+    /// Raise the window and switch pages, for a second launch that was
+    /// handed to the already-running instance.
+    pub fn present_window(self: &Rc<Self>, page: &str) {
+        if let Some(stack) = self.stack.borrow().as_ref() {
+            stack.set_visible_child_name(match page {
+                "preferences" => "preferences",
+                _ => "vocabulary",
+            });
+        }
+        self.window.present();
+    }
+
+    /// Open the editor for one word, wherever it sits in the list.
+    ///
+    /// Used by the popup's "Add definition" link so a word whose enrichment
+    /// found nothing can be completed without hunting for it.
+    pub fn edit_word(self: &Rc<Self>, id: i64) {
+        let ui = Rc::clone(self);
+        glib::spawn_future_local(async move {
+            match ui.client.get(id).await {
+                Ok(word) => ui.present_editor(&word),
+                Err(err) => ui.error(&err),
+            }
+        });
+    }
+
+    fn present_editor(self: &Rc<Self>, word: &Word) {
+        let id = word.id;
+        let ui = Rc::clone(self);
+        edit::present(&self.window, word, move |fields| {
+            let ui = Rc::clone(&ui);
+            glib::spawn_future_local(async move {
+                match ui.client.update(id, fields).await {
+                    Ok(w) => {
+                        ui.toast(&format!("Updated “{}”", w.term));
+                        ui.reload();
+                    }
+                    Err(err) => ui.error(&err),
+                }
+            });
+        });
     }
 
     fn restore_word(self: &Rc<Self>, id: i64) {
@@ -645,4 +693,38 @@ fn settings() -> Option<gio::Settings> {
     gio::SettingsSchemaSource::default()?
         .lookup(SCHEMA_ID, true)
         .map(|_| gio::Settings::new(SCHEMA_ID))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A detailed action string like "word.edit(3)" parses its target as
+    /// int32, while the actions take int64 -- and GTK silently drops an
+    /// activation whose target type does not match, so every row menu entry
+    /// became a no-op. Keep the targets explicitly typed.
+    #[test]
+    fn row_action_targets_are_int64() {
+        for action in ["word.edit", "word.learned", "word.restore", "word.delete"] {
+            let item = row_action("Label", action, 3);
+            let target = item
+                .attribute_value("target", None)
+                .expect("the item carries a target");
+            assert_eq!(
+                target.type_().as_str(),
+                "x",
+                "{action} target must be int64, got {}",
+                target.type_().as_str()
+            );
+            assert_eq!(target.get::<i64>(), Some(3));
+        }
+    }
+
+    #[test]
+    fn a_detailed_action_string_would_have_produced_int32() {
+        // Documents the original defect: this is what the code used to build.
+        let (_, target) = gio::Action::parse_detailed_name("word.edit(3)").expect("parses");
+        let target = target.expect("has a target");
+        assert_eq!(target.type_().as_str(), "i", "still int32, hence the bug");
+    }
 }

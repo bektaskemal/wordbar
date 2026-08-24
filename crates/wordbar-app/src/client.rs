@@ -19,6 +19,7 @@ use crate::word::{Word, WordDict};
 )]
 trait Wordbar {
     fn add_word(&self, text: &str) -> zbus::Result<WordDict>;
+    fn get_word_details(&self, id: i64) -> zbus::Result<WordDict>;
     fn update_word(&self, id: i64, fields: HashMap<&str, &str>) -> zbus::Result<WordDict>;
     fn mark_learned(&self, id: i64) -> zbus::Result<WordDict>;
     fn restore_word(&self, id: i64) -> zbus::Result<WordDict>;
@@ -50,6 +51,10 @@ enum Request {
     },
     Stats {
         reply: Sender<Result<(u32, u32), String>>,
+    },
+    Get {
+        id: i64,
+        reply: Sender<Result<Word, String>>,
     },
     Add {
         text: String,
@@ -146,6 +151,11 @@ impl Client {
 
     pub async fn stats(&self) -> Result<(u32, u32), String> {
         self.request(|reply| Request::Stats { reply }).await
+    }
+
+    /// Fetch one word by id, for opening its editor directly.
+    pub async fn get(&self, id: i64) -> Result<Word, String> {
+        self.request(|reply| Request::Get { id, reply }).await
     }
 
     pub async fn add(&self, text: &str) -> Result<Word, String> {
@@ -246,6 +256,14 @@ async fn handle(proxy: &WordbarProxy<'_>, request: Request) {
                 .send(proxy.get_stats().await.map_err(|e| describe(&e)))
                 .await;
         }
+        Request::Get { id, reply } => {
+            let result = proxy
+                .get_word_details(id)
+                .await
+                .map_err(|e| describe(&e))
+                .and_then(|d| Word::from_dict(&d).ok_or_else(|| format!("no word with id {id}")));
+            let _ = reply.send(result).await;
+        }
         Request::Add { text, reply } => {
             let result = proxy
                 .add_word(&text)
@@ -333,6 +351,7 @@ async fn drain_with_error(requests: Receiver<Request>, message: String) {
         match request {
             Request::List { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Stats { reply } => drop(reply.send(Err(message)).await),
+            Request::Get { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Add { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Update { reply, .. } => drop(reply.send(Err(message)).await),
             Request::MarkLearned { reply, .. } => drop(reply.send(Err(message)).await),

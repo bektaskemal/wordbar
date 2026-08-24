@@ -74,8 +74,8 @@ install-dbus:
 
 install-desktop:
 	install -d $(DESTDIR)$(DATADIR)/applications
-	install -m 0644 packaging/org.wordbar.Wordbar.desktop \
-		$(DESTDIR)$(DATADIR)/applications/org.wordbar.Wordbar.desktop
+	install -m 0644 packaging/org.wordbar.Manager.desktop \
+		$(DESTDIR)$(DATADIR)/applications/org.wordbar.Manager.desktop
 
 install-extension:
 	install -d $(DESTDIR)$(EXTENSIONDIR)/schemas
@@ -88,6 +88,7 @@ uninstall:
 	for binary in $(BINARIES); do rm -f $(DESTDIR)$(BINDIR)/$$binary; done
 	rm -f $(DESTDIR)$(DATADIR)/dbus-1/services/org.wordbar.Wordbar.service
 	rm -f $(DESTDIR)$(DATADIR)/applications/org.wordbar.Wordbar.desktop
+	rm -f $(DESTDIR)$(DATADIR)/applications/org.wordbar.Manager.desktop
 	rm -rf $(DESTDIR)$(EXTENSIONDIR)
 	@echo "Your vocabulary in ~/.local/share/wordbar was left untouched."
 

@@ -50,6 +50,9 @@ const IFACE = `
       <arg name="id" type="x" direction="in"/>
     </method>
     <method name="OpenVocabulary"/>
+    <method name="OpenWordEditor">
+      <arg name="id" type="x" direction="in"/>
+    </method>
     <method name="OpenPreferences"/>
     <method name="Ping">
       <arg type="s" direction="out"/>
@@ -289,6 +292,10 @@ export const Backend = GObject.registerClass({
 
     async openVocabulary() {
         await this._call('OpenVocabulary');
+    }
+
+    async openWordEditor(id) {
+        await this._call('OpenWordEditor', id);
     }
 
     async openPreferences() {
