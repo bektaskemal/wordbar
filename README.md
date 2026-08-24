@@ -116,10 +116,31 @@ history is a later feature; the schema keeps it possible.
 ## Development
 
 ```bash
-make test    # Rust unit and integration tests
+make dev     # reload the extension in a nested Shell -- no logout
+make test    # Rust and extension tests, plus static extension checks
 make e2e     # full backend over a private session bus
 make lint    # rustfmt + clippy
 ```
+
+### Iterating on the extension
+
+GNOME Shell is the Wayland compositor, so it cannot be restarted in place
+(`Alt+F2` -> `r` is X11-only), and it imports each extension module exactly
+once per process -- disabling and re-enabling will not pick up edited files.
+A naive loop therefore costs a logout per change.
+
+`make dev` avoids that by starting a second GNOME Shell nested in a window,
+against a private session bus and a throwaway vocabulary. Edit, close the
+window, run it again. Pass `--real-data` to use your actual vocabulary:
+
+```bash
+./scripts/dev-shell.sh --real-data
+```
+
+`make test` runs `scripts/check-extension.sh`, which catches the faults that
+would otherwise cost a logout to discover: `gettext` or other calls at module
+scope (they run before the extension object exists), unresolved relative
+imports, malformed metadata, and a schema that does not compile.
 
 `make e2e` is the milestone that matters: if `wordbarctl` cannot drive the
 whole workflow reliably, no frontend work should start.

@@ -20,7 +20,7 @@ TARGETDIR   ?= target/release
 
 BINARIES = wordbar-service wordbarctl wordbar-app
 
-.PHONY: all build test test-rust test-extension e2e lint install install-binaries \
+.PHONY: all build test test-rust test-extension dev e2e lint install install-binaries \
         install-dbus install-desktop install-extension uninstall clean help
 
 all: build
@@ -38,6 +38,10 @@ test-rust:
 test-extension:
 	./scripts/check-extension.sh
 	gjs -m extension/test/terms-test.js
+
+## dev: reload the extension in a nested Shell, no logout needed
+dev: build
+	./scripts/dev-shell.sh
 
 ## e2e: prove the backend over a private session bus (Phase 10)
 e2e: build

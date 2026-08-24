@@ -38,8 +38,13 @@ database, so it never touches your real vocabulary. It covers:
 ## 4. GNOME Shell — manual
 
 Automated Shell testing needs a live session, so this list is run by hand
-before a release. On Wayland, log out and back in between builds; on X11,
-`Alt+F2` → `r` is enough.
+before a release.
+
+Use `make dev` rather than logging out between builds: it starts a nested
+GNOME Shell in a window with a throwaway vocabulary, so a code change costs a
+window close instead of a session. Add `--real-data` to test against your own
+words. Log out and back in only for a final check in a real session, since a
+nested Shell cannot verify the global capture shortcut.
 
 - [ ] the panel word appears after enabling the extension
 - [ ] with an empty vocabulary the panel shows `+ word` and the popup explains capture
