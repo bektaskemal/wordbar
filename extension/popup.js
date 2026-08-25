@@ -199,7 +199,9 @@ export const WordCard = GObject.registerClass({
         this._example.visible = example !== '';
 
         this._addDefinition.visible = definition === '';
-        this._speaker.visible = Boolean(word.phonetic);
+        // Offered whenever we can say something: a recording, or a
+        // phonetic spelling worth synthesising.
+        this._speaker.visible = Boolean(word.has_audio) || Boolean(word.phonetic);
     }
 
     _setActionsEnabled(enabled) {

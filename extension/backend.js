@@ -61,6 +61,9 @@ const IFACE = `
       <arg name="sense_id" type="x" direction="in"/>
       <arg type="a{sv}" direction="out"/>
     </method>
+    <method name="Speak">
+      <arg name="id" type="x" direction="in"/>
+    </method>
     <method name="OpenIncomplete"/>
     <method name="CountIncomplete">
       <arg type="u" direction="out"/>
@@ -331,6 +334,10 @@ export const Backend = GObject.registerClass({
     async selectSense(senseId) {
         const [word] = await this._call('SelectSense', senseId);
         return unpackWord(word);
+    }
+
+    async speak(id) {
+        await this._call('Speak', id);
     }
 
     async openIncomplete() {

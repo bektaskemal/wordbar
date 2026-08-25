@@ -8,6 +8,7 @@ pub mod dict;
 pub mod engine;
 pub mod exchange;
 pub mod paths;
+pub mod speech;
 pub mod store;
 
 pub use engine::Engine;

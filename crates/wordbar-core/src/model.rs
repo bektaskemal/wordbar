@@ -48,6 +48,8 @@ pub struct Word {
     pub example: Option<String>,
     pub part_of_speech: Option<String>,
     pub phonetic: Option<String>,
+    /// Where the dictionary's pronunciation recording lives, if it had one.
+    pub audio_url: Option<String>,
 
     pub status: WordStatus,
 

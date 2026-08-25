@@ -20,6 +20,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 2,
         sql: include_str!("../../migrations/002_senses.sql"),
     },
+    Migration {
+        version: 3,
+        sql: include_str!("../../migrations/003_audio.sql"),
+    },
 ];
 
 /// The schema version this build expects.

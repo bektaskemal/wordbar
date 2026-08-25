@@ -17,6 +17,7 @@ pub struct NewWord {
     pub example: Option<String>,
     pub part_of_speech: Option<String>,
     pub phonetic: Option<String>,
+    pub audio_url: Option<String>,
 }
 
 impl NewWord {
@@ -40,6 +41,7 @@ pub struct WordPatch {
     pub example: Option<Option<String>>,
     pub part_of_speech: Option<Option<String>>,
     pub phonetic: Option<Option<String>>,
+    pub audio_url: Option<Option<String>>,
 }
 
 impl WordPatch {
@@ -49,6 +51,7 @@ impl WordPatch {
             && self.example.is_none()
             && self.part_of_speech.is_none()
             && self.phonetic.is_none()
+            && self.audio_url.is_none()
     }
 }
 

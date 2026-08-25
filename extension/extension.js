@@ -5,7 +5,6 @@
  */
 
 import GLib from 'gi://GLib';
-import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
@@ -414,21 +413,17 @@ export default class WordbarExtension extends Extension {
     }
 
     /**
-     * Pronunciation, Phase 19: hand the term to the session's speech service
-     * if one is installed. Deliberately not a hard dependency — a missing
-     * spd-say is a no-op, not an error dialog.
+     * Pronounce the current word.
+     *
+     * The service does the work -- fetching, caching and playing, or
+     * synthesising when there is no recording -- so the compositor never
+     * downloads a file or spawns a media player.
      */
-    _speak(id) {
-        const word = this._indicator?.currentWord;
-        if (!word || word.id !== id)
-            return;
+    async _speak(id) {
         try {
-            const [ok, argv] = GLib.shell_parse_argv(`spd-say -- ${GLib.shell_quote(word.term)}`);
-            if (!ok)
-                return;
-            Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
-        } catch (_error) {
-            // No speech dispatcher installed; pronunciation is optional.
+            await this._backend.speak(id);
+        } catch (error) {
+            this._logFailure('pronouncing the word', error);
         }
     }
 

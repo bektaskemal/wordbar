@@ -299,6 +299,8 @@ impl WordbarService {
             example: text("example"),
             part_of_speech: text("part_of_speech"),
             phonetic: text("phonetic"),
+            // Not editable by hand: it is dictionary metadata, not content.
+            audio_url: None,
         };
         let outcome = {
             let mut engine = self.engine.lock().await;
@@ -435,6 +437,18 @@ impl WordbarService {
         Ok(engine.count_incomplete()? as u32)
     }
 
+    /// Pronounce a word: its dictionary recording if there is one, otherwise
+    /// speech synthesis. Playback happens here, never in the Shell.
+    async fn speak(&self, id: i64) -> Result<(), ServiceError> {
+        let (term, audio_url) = {
+            let engine = self.engine.lock().await;
+            let word = engine.get_word(id)?;
+            (word.term.clone(), word.audio_url.clone())
+        };
+        crate::speech::speak(&term, audio_url.as_deref()).await?;
+        Ok(())
+    }
+
     /// Liveness check used by the CLI and the extension's retry loop.
     async fn ping(&self) -> Result<String, ServiceError> {
         Ok(env!("CARGO_PKG_VERSION").to_string())
@@ -524,6 +538,13 @@ pub fn word_dict(word: &Word) -> WordDict {
             .unwrap_or_default(),
     );
     insert(&mut dict, "incomplete", word.is_incomplete());
+    insert(
+        &mut dict,
+        "has_audio",
+        word.audio_url
+            .as_deref()
+            .is_some_and(|u| !u.trim().is_empty()),
+    );
     dict
 }
 

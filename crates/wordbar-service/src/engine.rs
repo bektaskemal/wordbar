@@ -172,6 +172,7 @@ impl Engine {
         // runs just after a capture, before anyone could have chosen a sense.
         let mut patch = WordPatch {
             phonetic: entry.phonetic.clone().map(Some),
+            audio_url: entry.audio_url.clone().map(Some),
             ..WordPatch::default()
         };
         if let Some(primary) = entry.primary() {

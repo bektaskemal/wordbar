@@ -94,6 +94,7 @@ pub fn import(
             example: word.example,
             part_of_speech: word.part_of_speech,
             phonetic: None,
+            audio_url: None,
         };
         match engine.add_word_full(new, now) {
             Ok(_) => report.added += 1,

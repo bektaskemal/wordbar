@@ -70,7 +70,8 @@ impl SqliteStore {
 }
 
 const WORD_COLUMNS: &str = "id, term, normalized_term, definition, example, part_of_speech, \
-                            phonetic, status, created_at, updated_at, last_displayed_at";
+                            phonetic, audio_url, status, created_at, updated_at, \
+                            last_displayed_at";
 
 const SENSE_COLUMNS: &str = "id, word_id, position, part_of_speech, definition, example";
 
@@ -88,8 +89,8 @@ impl Storage for SqliteStore {
         let tx = self.conn.transaction().map_err(sql_err)?;
         tx.execute(
             "INSERT INTO words (term, normalized_term, definition, example, part_of_speech,
-                                phonetic, status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7, ?7)",
+                                phonetic, audio_url, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'active', ?8, ?8)",
             params![
                 normalized.display,
                 normalized.key,
@@ -97,6 +98,7 @@ impl Storage for SqliteStore {
                 blank_to_none(new.example),
                 blank_to_none(new.part_of_speech),
                 blank_to_none(new.phonetic),
+                blank_to_none(new.audio_url),
                 ts(now),
             ],
         )
@@ -162,6 +164,7 @@ impl Storage for SqliteStore {
             ("example", &patch.example),
             ("part_of_speech", &patch.part_of_speech),
             ("phonetic", &patch.phonetic),
+            ("audio_url", &patch.audio_url),
         ] {
             if let Some(value) = value {
                 self.conn
@@ -397,7 +400,7 @@ impl Storage for SqliteStore {
             .query_map([], |row| {
                 Ok(DisplayCandidate {
                     word: row_to_word(row)?,
-                    card: row_to_card_offset(row, 11)?,
+                    card: row_to_card_offset(row, 12)?,
                 })
             })
             .map_err(sql_err)?;
@@ -472,10 +475,11 @@ fn row_to_word(row: &Row) -> rusqlite::Result<Word> {
         example: row.get(4)?,
         part_of_speech: row.get(5)?,
         phonetic: row.get(6)?,
-        status: WordStatus::parse(&row.get::<_, String>(7)?).unwrap_or(WordStatus::Active),
-        created_at: parse_ts(row, 8)?,
-        updated_at: parse_ts(row, 9)?,
-        last_displayed_at: parse_ts_opt(row, 10)?,
+        audio_url: row.get(7)?,
+        status: WordStatus::parse(&row.get::<_, String>(8)?).unwrap_or(WordStatus::Active),
+        created_at: parse_ts(row, 9)?,
+        updated_at: parse_ts(row, 10)?,
+        last_displayed_at: parse_ts_opt(row, 11)?,
     })
 }
 
