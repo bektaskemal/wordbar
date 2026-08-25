@@ -70,10 +70,9 @@ export default class WordbarExtension extends Extension {
 
         indicator.connect('rated-again', (_i, id) => this._rate(id, 'rateAgain'));
         indicator.connect('rated-know', (_i, id) => this._rate(id, 'rateKnow'));
-        indicator.connect('marked-learned', (_i, id) => this._markLearned(id));
         indicator.connect('add-requested', () => this._showAddDialog(''));
         indicator.connect('vocabulary-requested', () => this._openManager('openVocabulary'));
-        indicator.connect('preferences-requested', () => this._openManager('openPreferences'));
+        indicator.connect('incomplete-requested', () => this._openManager('openIncomplete'));
         // "Add definition" opens that word's editor, not the whole list.
         indicator.connect('edit-requested', (_i, id) => this._editWord(id));
         indicator.connect('speak-requested', (_i, id) => this._speak(id));
@@ -98,6 +97,8 @@ export default class WordbarExtension extends Extension {
             if (current && current.id === id)
                 this._refreshDetails(id);
         });
+
+        this._backend.connect('vocabulary-changed', () => this._refreshIncomplete());
 
         this._backend.connect('availability-changed', (_b, available) => {
             this._indicator?.setAvailable(available);
@@ -173,6 +174,18 @@ export default class WordbarExtension extends Extension {
         } catch (error) {
             this._logFailure('reading the current word', error);
         }
+        this._refreshIncomplete();
+    }
+
+    /** Count words still missing a definition, for the popup footer. */
+    async _refreshIncomplete() {
+        try {
+            const count = await this._backend.countIncomplete();
+            this._indicator?.setIncompleteCount(count);
+        } catch (error) {
+            this._indicator?.setIncompleteCount(0);
+            this._logFailure('counting incomplete words', error);
+        }
     }
 
     /**
@@ -223,32 +236,6 @@ export default class WordbarExtension extends Extension {
         }
     }
 
-    async _markLearned(id) {
-        const word = this._indicator?.currentWord;
-        const term = word?.term ?? '';
-        this._pendingRotation = false;
-        this._indicator?.menu.close();
-
-        try {
-            const next = await this._backend.markLearned(id);
-            this._indicator?.setWord(next);
-            showUndoToast(
-                _('Marked “%s” as learned').replace('%s', term),
-                () => this._restore(id)
-            );
-        } catch (error) {
-            this._logFailure('marking the word learned', error);
-        }
-    }
-
-    async _restore(id) {
-        try {
-            await this._backend.restoreWord(id);
-        } catch (error) {
-            this._logFailure('restoring the word', error);
-        }
-    }
-
     // -- capture ----------------------------------------------------------
 
     _addKeybinding() {
@@ -266,7 +253,10 @@ export default class WordbarExtension extends Extension {
     }
 
     _onCaptureShortcut() {
-        capture({onCapture: text => this._addWord(text)}).catch(error => {
+        capture({
+            onCapture: text => this._addWord(text),
+            onRejected: () => showToast(_('Select a word or short phrase.')),
+        }).catch(error => {
             this._logFailure('capturing the selection', error);
         });
     }

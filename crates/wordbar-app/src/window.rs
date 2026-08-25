@@ -35,6 +35,8 @@ pub struct Ui {
     words: RefCell<Vec<Word>>,
     /// Set once the pages are built, so a later launch can switch page.
     stack: RefCell<Option<adw::ViewStack>>,
+    /// Restrict the list to words that still need a definition.
+    incomplete_only: RefCell<bool>,
 }
 
 pub fn build(
@@ -126,6 +128,7 @@ impl Ui {
             showing_learned: RefCell::new(false),
             words: RefCell::new(Vec::new()),
             stack: RefCell::new(None),
+            incomplete_only: RefCell::new(false),
         }
     }
 
@@ -191,7 +194,12 @@ impl Ui {
         glib::spawn_future_local(async move {
             let query = ui.search.text().to_string();
             match ui.client.list(ui.filter(), &query).await {
-                Ok(words) => ui.show_words(&words, !query.is_empty()),
+                Ok(mut words) => {
+                    if *ui.incomplete_only.borrow() {
+                        words.retain(|w| w.definition.is_empty());
+                    }
+                    ui.show_words(&words, !query.is_empty());
+                }
                 Err(err) => {
                     ui.show_words(&[], false);
                     ui.error(&err);
@@ -326,6 +334,15 @@ impl Ui {
         group.add_action(&delete);
 
         self.window.insert_action_group("word", Some(&group));
+    }
+
+    /// Show only words with no definition, as the popup's hint asks for.
+    pub fn show_incomplete_only(self: &Rc<Self>) {
+        *self.incomplete_only.borrow_mut() = true;
+        if let Some(stack) = self.stack.borrow().as_ref() {
+            stack.set_visible_child_name("vocabulary");
+        }
+        self.reload();
     }
 
     /// Raise the window and switch pages, for a second launch that was

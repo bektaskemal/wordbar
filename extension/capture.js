@@ -29,11 +29,20 @@ export {looksLikeTerm};
  * @param {object} handlers
  * @param {function(string): void} handlers.onCapture  called with the term to add
  * @param {function(): void} [handlers.onDialogOpened]
+ * @param {function(): void} [handlers.onRejected]  selection was not a term
  */
-export async function capture({onCapture, onDialogOpened}) {
+export async function capture({onCapture, onDialogOpened, onRejected}) {
     const primary = await readClipboard(St.ClipboardType.PRIMARY);
     if (looksLikeTerm(primary)) {
         onCapture(primary.trim());
+        return;
+    }
+
+    // Something was selected, but it is not a term. Say so rather than
+    // silently discarding it and opening a box prefilled from an unrelated
+    // clipboard, which is what this used to do.
+    if (primary && primary.trim() !== '') {
+        onRejected?.();
         return;
     }
 

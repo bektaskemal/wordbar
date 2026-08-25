@@ -53,6 +53,10 @@ const IFACE = `
     <method name="OpenWordEditor">
       <arg name="id" type="x" direction="in"/>
     </method>
+    <method name="OpenIncomplete"/>
+    <method name="CountIncomplete">
+      <arg type="u" direction="out"/>
+    </method>
     <method name="OpenPreferences"/>
     <method name="Ping">
       <arg type="s" direction="out"/>
@@ -298,8 +302,13 @@ export const Backend = GObject.registerClass({
         await this._call('OpenWordEditor', id);
     }
 
-    async openPreferences() {
-        await this._call('OpenPreferences');
+    async openIncomplete() {
+        await this._call('OpenIncomplete');
+    }
+
+    async countIncomplete() {
+        const [count] = await this._call('CountIncomplete');
+        return count;
     }
 
     destroy() {

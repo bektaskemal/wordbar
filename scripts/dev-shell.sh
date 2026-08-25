@@ -27,6 +27,8 @@ esac
 
 command -v gnome-shell >/dev/null || { echo "gnome-shell not found" >&2; exit 1; }
 
+EXTENSION_UUID="wordbar@kemalbektas.dev"
+
 ./scripts/check-extension.sh
 make install-extension
 
@@ -43,6 +45,16 @@ fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+
+# Give the nested Shell its own settings store. Sharing the live session's
+# means the dev Shell inherits whatever state the real one is in -- and the
+# real Shell drops an extension to INACTIVE once its files change underneath
+# it, which then silently stops the dev Shell from enabling it too.
+export XDG_CONFIG_HOME="$WORK/config"
+mkdir -p "$XDG_CONFIG_HOME"
+gsettings set org.gnome.shell disable-user-extensions false
+gsettings set org.gnome.shell enabled-extensions "['$EXTENSION_UUID']"
+gsettings set org.gnome.shell disabled-extensions "[]"
 
 if [[ $REAL_DATA -eq 0 ]]; then
     export WORDBAR_DATA_DIR="$WORK/db"

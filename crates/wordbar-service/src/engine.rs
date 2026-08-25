@@ -153,6 +153,17 @@ impl Engine {
         }
     }
 
+    /// Active words with no definition yet, either because enrichment failed
+    /// or because they were captured offline.
+    pub fn count_incomplete(&self) -> Result<usize> {
+        Ok(self
+            .store
+            .list_words(WordFilter::Active)?
+            .iter()
+            .filter(|w| w.is_incomplete())
+            .count())
+    }
+
     pub fn stats(&self) -> Result<Stats> {
         Ok(Stats {
             active: self.store.count_words(WordFilter::Active)?,

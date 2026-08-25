@@ -4,9 +4,32 @@
  * extension follows light/dark and accent-colour changes.
  */
 
+.wordbar-panel-box {
+    spacing: 4px;
+}
+
 .wordbar-panel-label {
     font-weight: 500;
     padding: 0 4px;
+}
+
+/* Shown instead of a word when the service cannot be reached. */
+.wordbar-panel-warning {
+    color: #f5c211;
+}
+
+/* Quiet by design: a nudge toward the manager, not a demand. */
+.wordbar-incomplete {
+    margin: 0 12px;
+    padding: 4px 6px;
+    font-size: 0.9em;
+    opacity: 0.75;
+}
+
+.wordbar-incomplete:hover,
+.wordbar-incomplete:focus {
+    opacity: 1;
+    background-color: rgba(127, 127, 127, 0.2);
 }
 
 /* -- popup card -------------------------------------------------------- */

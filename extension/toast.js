@@ -75,14 +75,32 @@ export const Toast = GObject.registerClass({
         this.connect('destroy', () => this._onDestroy());
     }
 
+    /**
+     * Sit just under the top bar, near the indicator.
+     *
+     * That ties the confirmation to where the word will actually appear,
+     * rather than announcing it at the far end of the screen.
+     */
     _reposition() {
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
             return;
-        this.set_position(
-            monitor.x + Math.floor((monitor.width - this.width) / 2),
-            monitor.y + Math.floor(monitor.height * 0.85)
-        );
+
+        const panel = Main.panel;
+        const top = monitor.y + (panel ? panel.height : 0) + 8;
+
+        // Prefer to line up with the indicator, but never leave the monitor.
+        let left = monitor.x + Math.floor((monitor.width - this.width) / 2);
+        const indicator = Main.panel.statusArea['wordbar@kemalbektas.dev'];
+        if (indicator) {
+            const [x] = indicator.get_transformed_position();
+            if (!Number.isNaN(x))
+                left = Math.round(x - this.width / 2 + indicator.width / 2);
+        }
+        const maxLeft = monitor.x + monitor.width - this.width - 8;
+        left = Math.max(monitor.x + 8, Math.min(left, maxLeft));
+
+        this.set_position(left, top);
     }
 
     _startTimer() {

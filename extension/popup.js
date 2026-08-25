@@ -19,7 +19,6 @@ export const WordCard = GObject.registerClass({
     Signals: {
         'rated-again': {},
         'rated-know': {},
-        'marked-learned': {},
         'speak-requested': {},
         'edit-requested': {},
     },
@@ -70,11 +69,13 @@ export const WordCard = GObject.registerClass({
         this._addDefinition.connect('clicked', () => this.emit('edit-requested'));
         this.add_child(this._addDefinition);
 
+        // Two ratings only. Archiving is housekeeping and lives in the
+        // manager; a Learned button here invites premature archiving of words
+        // that are still being learned.
         const actions = new St.BoxLayout({style_class: 'wordbar-actions', x_expand: true});
         this._again = this._actionButton(_('Again'), 'wordbar-action-again', 'rated-again');
         this._know = this._actionButton(_('Know'), 'wordbar-action-know', 'rated-know');
-        this._learned = this._actionButton(_('Learned'), 'wordbar-action-learned', 'marked-learned');
-        for (const button of [this._again, this._know, this._learned])
+        for (const button of [this._again, this._know])
             actions.add_child(button);
         this.add_child(actions);
 
@@ -103,8 +104,10 @@ export const WordCard = GObject.registerClass({
         if (!word) {
             this._term.text = _('No words yet');
             this._partOfSpeech.visible = false;
-            this._definition.text =
-                _('Select a word and press Super+Shift+V to add it.');
+            this._definition.text = _(
+                'Select a word anywhere and press Super+Shift+V to add it.\n' +
+                'Right-click this indicator to open Wordbar.'
+            );
             this._definition.visible = true;
             this._example.visible = false;
             this._addDefinition.visible = false;
@@ -137,7 +140,7 @@ export const WordCard = GObject.registerClass({
     }
 
     _setActionsEnabled(enabled) {
-        for (const button of [this._again, this._know, this._learned]) {
+        for (const button of [this._again, this._know]) {
             button.reactive = enabled;
             button.can_focus = enabled;
             button.opacity = enabled ? 255 : 128;

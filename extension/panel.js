@@ -16,17 +16,17 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 import {WordCard} from './popup.js';
 import {ellipsize} from './terms.js';
 
-/** Shown while the backend is unreachable (Phase 25). */
-const UNAVAILABLE_TEXT = '—';
+/** Marks a word that is due for review. */
+const DUE_MARK = ' \u2022';
 
 /**
- * Shown when the vocabulary is empty.
+ * Shown when the vocabulary is empty: a name to click, not a cryptic mark.
  *
  * Resolved lazily on purpose: gettext identifies the calling extension from
  * the stack, so it throws while this module is still being evaluated.
  */
 function emptyText() {
-    return _('+ word');
+    return _('Wordbar');
 }
 
 export const WordbarIndicator = GObject.registerClass({
@@ -34,10 +34,9 @@ export const WordbarIndicator = GObject.registerClass({
     Signals: {
         'rated-again': {param_types: [GObject.TYPE_INT64]},
         'rated-know': {param_types: [GObject.TYPE_INT64]},
-        'marked-learned': {param_types: [GObject.TYPE_INT64]},
         'add-requested': {},
         'vocabulary-requested': {},
-        'preferences-requested': {},
+        'incomplete-requested': {},
         'speak-requested': {param_types: [GObject.TYPE_INT64]},
         'edit-requested': {param_types: [GObject.TYPE_INT64]},
         'popup-opened': {},
@@ -51,12 +50,32 @@ export const WordbarIndicator = GObject.registerClass({
         this._word = null;
         this._available = true;
 
+        const box = new St.BoxLayout({style_class: 'wordbar-panel-box'});
+        this._warning = new St.Icon({
+            style_class: 'wordbar-panel-warning',
+            icon_name: 'dialog-warning-symbolic',
+            icon_size: 16,
+            visible: false,
+        });
+        box.add_child(this._warning);
         this._label = new St.Label({
             style_class: 'wordbar-panel-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this.add_child(this._label);
+        box.add_child(this._label);
+        this.add_child(box);
         this._renderLabel();
+
+        // Right-click opens the manager. Undiscoverable by nature, so the
+        // empty-state popup spells it out.
+        this.connect('button-press-event', (_actor, event) => {
+            if (event.get_button() === Clutter.BUTTON_SECONDARY) {
+                this.menu.close();
+                this.emit('vocabulary-requested');
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
 
         this._buildMenu();
 
@@ -76,7 +95,6 @@ export const WordbarIndicator = GObject.registerClass({
 
         this._card.connect('rated-again', () => this._emitForWord('rated-again'));
         this._card.connect('rated-know', () => this._emitForWord('rated-know'));
-        this._card.connect('marked-learned', () => this._emitForWord('marked-learned'));
         this._card.connect('speak-requested', () => this._emitForWord('speak-requested'));
         this._card.connect('edit-requested', () => this._emitForWord('edit-requested'));
 
@@ -86,11 +104,26 @@ export const WordbarIndicator = GObject.registerClass({
         // one.
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
+        // A quiet count of words still missing a definition, opening the
+        // manager filtered to them. Fixing them in one sitting beats being
+        // interrupted at capture time, and offline that would be every capture.
+        this._incomplete = new St.Button({
+            style_class: 'wordbar-footer-button wordbar-incomplete',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.START,
+            can_focus: true,
+            visible: false,
+        });
+        this._incomplete.connect('clicked', () => {
+            this.menu.close();
+            this.emit('incomplete-requested');
+        });
+        this.menu.box.add_child(this._incomplete);
+
         const footerBox = new St.BoxLayout({
             style_class: 'wordbar-footer',
             x_expand: true,
         });
-
         const addButton = new St.Button({
             style_class: 'wordbar-footer-button',
             label: _('+ Add word'),
@@ -103,40 +136,7 @@ export const WordbarIndicator = GObject.registerClass({
             this.emit('add-requested');
         });
         footerBox.add_child(addButton);
-
-        const moreButton = new St.Button({
-            style_class: 'wordbar-icon-button',
-            child: new St.Icon({icon_name: 'view-more-symbolic', icon_size: 16}),
-            y_align: Clutter.ActorAlign.CENTER,
-            can_focus: true,
-        });
-        moreButton.connect('clicked', () => this._toggleMoreMenu());
-        footerBox.add_child(moreButton);
         this.menu.box.add_child(footerBox);
-
-        // Secondary actions live behind "⋮" so the primary card stays clean.
-        this._moreSection = new PopupMenu.PopupMenuSection();
-        this._moreSection.actor.visible = false;
-
-        const vocabularyItem = new PopupMenu.PopupMenuItem(_('Vocabulary…'));
-        vocabularyItem.connect('activate', () => {
-            this.menu.close();
-            this.emit('vocabulary-requested');
-        });
-        this._moreSection.addMenuItem(vocabularyItem);
-
-        const preferencesItem = new PopupMenu.PopupMenuItem(_('Preferences…'));
-        preferencesItem.connect('activate', () => {
-            this.menu.close();
-            this.emit('preferences-requested');
-        });
-        this._moreSection.addMenuItem(preferencesItem);
-
-        this.menu.addMenuItem(this._moreSection);
-    }
-
-    _toggleMoreMenu() {
-        this._moreSection.actor.visible = !this._moreSection.actor.visible;
     }
 
     _emitForWord(signal) {
@@ -165,23 +165,39 @@ export const WordbarIndicator = GObject.registerClass({
     }
 
     /**
-     * Backend availability. An unreachable service shows a dash rather than
-     * an error dialog: the Shell degrades, it never nags (Phase 25).
+     * Backend availability. An unreachable service shows a warning icon
+     * rather than an error dialog: the Shell degrades, it never nags.
      */
     setAvailable(available) {
         this._available = available;
         this._renderLabel();
     }
 
+    /** Show how many words still need a definition, or hide the row. */
+    setIncompleteCount(count) {
+        this._incomplete.visible = count > 0;
+        if (count > 0) {
+            this._incomplete.label = count === 1
+                ? _('1 word needs a definition')
+                : _('%d words need definitions').replace('%d', String(count));
+        }
+    }
+
     _renderLabel() {
+        this._warning.visible = !this._available;
+
         if (!this._available) {
-            this._label.text = UNAVAILABLE_TEXT;
+            this._label.text = _('Wordbar');
             return;
         }
         if (!this._word) {
             this._label.text = emptyText();
             return;
         }
-        this._label.text = ellipsize(this._word.term, this._maxChars);
+
+        const term = ellipsize(this._word.term, this._maxChars);
+        // A dot marks a word that is due, so the panel says whether it wants
+        // attention without inviting you to read the definition.
+        this._label.text = this._word.is_due ? `${term}${DUE_MARK}` : term;
     }
 });

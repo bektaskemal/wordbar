@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use tokio::sync::Mutex;
 use wordbar_core::{
     DictionaryProvider, Error as CoreError, Rating, Word, WordFilter, WordId, WordPatch,
@@ -110,9 +110,10 @@ impl WordbarService {
             let dict = match current {
                 Some(id) => {
                     let engine = self.engine.lock().await;
+                    let now = Utc::now();
                     engine
                         .get_word(id)
-                        .map(|w| word_dict(&w))
+                        .map(|w| word_dict_with_card(&engine, &w, now))
                         .unwrap_or_default()
                 }
                 None => WordDict::new(),
@@ -125,6 +126,17 @@ impl WordbarService {
     async fn settle<T>(&self, outcome: Outcome<T>) -> T {
         self.publish(&outcome.effects).await;
         outcome.value
+    }
+
+    /// Render a word for the wire, or the empty dictionary for "no word".
+    async fn dict(&self, word: Option<&Word>) -> WordDict {
+        match word {
+            None => WordDict::new(),
+            Some(word) => {
+                let engine = self.engine.lock().await;
+                word_dict_with_card(&engine, word, Utc::now())
+            }
+        }
     }
 
     /// Kick off best-effort enrichment. Never awaited by the caller, so a slow
@@ -193,7 +205,7 @@ impl WordbarService {
         let word = outcome.value.clone();
         self.publish(&outcome.effects).await;
         self.spawn_enrichment(word.id, word.term.clone());
-        Ok(word_dict(&word))
+        Ok(self.dict(Some(&word)).await)
     }
 
     /// The panel word. Read-only in the steady state — safe to poll.
@@ -202,12 +214,8 @@ impl WordbarService {
             let mut engine = self.engine.lock().await;
             engine.current_word(Utc::now())?
         };
-        Ok(self
-            .settle(outcome)
-            .await
-            .as_ref()
-            .map(word_dict)
-            .unwrap_or_default())
+        let word = self.settle(outcome).await;
+        Ok(self.dict(word.as_ref()).await)
     }
 
     /// Rotate to the next word. State-changing; do not poll this.
@@ -216,18 +224,14 @@ impl WordbarService {
             let mut engine = self.engine.lock().await;
             engine.advance_display(Utc::now())?
         };
-        Ok(self
-            .settle(outcome)
-            .await
-            .as_ref()
-            .map(word_dict)
-            .unwrap_or_default())
+        let word = self.settle(outcome).await;
+        Ok(self.dict(word.as_ref()).await)
     }
 
     async fn get_word_details(&self, id: i64) -> Result<WordDict, ServiceError> {
         let engine = self.engine.lock().await;
         let word = engine.get_word(id)?;
-        let mut dict = word_dict(&word);
+        let mut dict = word_dict_with_card(&engine, &word, Utc::now());
         if let Some(card) = engine.get_card(id)? {
             insert(&mut dict, "due", card.due.to_rfc3339());
             insert(&mut dict, "reps", card.reps as i64);
@@ -241,10 +245,11 @@ impl WordbarService {
     /// Returns an empty dictionary when the term is not in the vocabulary.
     async fn find_word(&self, term: &str) -> Result<WordDict, ServiceError> {
         let engine = self.engine.lock().await;
+        let now = Utc::now();
         Ok(engine
             .find_by_term(term)?
             .as_ref()
-            .map(word_dict)
+            .map(|w| word_dict_with_card(&engine, w, now))
             .unwrap_or_default())
     }
 
@@ -268,12 +273,8 @@ impl WordbarService {
             (marked, advanced)
         };
         self.publish(&marked.effects).await;
-        Ok(self
-            .settle(advanced)
-            .await
-            .as_ref()
-            .map(word_dict)
-            .unwrap_or_default())
+        let word = self.settle(advanced).await;
+        Ok(self.dict(word.as_ref()).await)
     }
 
     /// Bring an archived word back into rotation with its FSRS state intact.
@@ -282,7 +283,8 @@ impl WordbarService {
             let mut engine = self.engine.lock().await;
             engine.restore_word(id, Utc::now())?
         };
-        Ok(word_dict(&self.settle(outcome).await))
+        let word = self.settle(outcome).await;
+        Ok(self.dict(Some(&word)).await)
     }
 
     async fn delete_word(&self, id: i64) -> Result<(), ServiceError> {
@@ -313,7 +315,8 @@ impl WordbarService {
             let mut engine = self.engine.lock().await;
             engine.update_word(id, patch, Utc::now())?
         };
-        Ok(word_dict(&self.settle(outcome).await))
+        let word = self.settle(outcome).await;
+        Ok(self.dict(Some(&word)).await)
     }
 
     /// List the vocabulary. `filter` is `active`, `learned` or `all`;
@@ -322,10 +325,11 @@ impl WordbarService {
         let filter = WordFilter::parse(filter)
             .ok_or_else(|| ServiceError::InvalidTerm(format!("unknown filter \"{filter}\"")))?;
         let engine = self.engine.lock().await;
+        let now = Utc::now();
         Ok(engine
             .list_words(filter, query)?
             .iter()
-            .map(word_dict)
+            .map(|w| word_dict_with_card(&engine, w, now))
             .collect())
     }
 
@@ -389,6 +393,17 @@ impl WordbarService {
         spawn_app(&["--page", "preferences"])
     }
 
+    /// Launch the manager showing only words that still need a definition.
+    async fn open_incomplete(&self) -> Result<(), ServiceError> {
+        spawn_app(&["--incomplete"])
+    }
+
+    /// How many active words still have no definition, for the popup's hint.
+    async fn count_incomplete(&self) -> Result<u32, ServiceError> {
+        let engine = self.engine.lock().await;
+        Ok(engine.count_incomplete()? as u32)
+    }
+
     /// Liveness check used by the CLI and the extension's retry loop.
     async fn ping(&self) -> Result<String, ServiceError> {
         Ok(env!("CARGO_PKG_VERSION").to_string())
@@ -413,12 +428,8 @@ impl WordbarService {
             let mut engine = self.engine.lock().await;
             engine.rate_and_advance(id, rating, Utc::now())?
         };
-        Ok(self
-            .settle(outcome)
-            .await
-            .as_ref()
-            .map(word_dict)
-            .unwrap_or_default())
+        let word = self.settle(outcome).await;
+        Ok(self.dict(word.as_ref()).await)
     }
 }
 
@@ -445,6 +456,19 @@ fn insert(dict: &mut WordDict, key: &str, value: impl Into<Value<'static>>) {
     if let Ok(owned) = OwnedValue::try_from(value.into()) {
         dict.insert(key.to_string(), owned);
     }
+}
+
+/// Render a word together with its scheduling state.
+///
+/// The panel shows a dot when a word is due, so `is_due` travels with every
+/// word rather than only with the detailed lookup.
+fn word_dict_with_card(engine: &Engine, word: &Word, now: DateTime<Utc>) -> WordDict {
+    let mut dict = word_dict(word);
+    if let Ok(Some(card)) = engine.get_card(word.id) {
+        insert(&mut dict, "is_due", card.is_due(now));
+        insert(&mut dict, "due", card.due.to_rfc3339());
+    }
+    dict
 }
 
 /// Render a word for the wire. Absent optional fields become empty strings so

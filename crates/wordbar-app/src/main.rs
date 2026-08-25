@@ -29,6 +29,10 @@ struct Cli {
     /// Open the editor for this word id straight away.
     #[arg(long)]
     edit: Option<i64>,
+
+    /// Show only words that still need a definition.
+    #[arg(long)]
+    incomplete: bool,
 }
 
 fn main() -> glib::ExitCode {
@@ -65,6 +69,9 @@ fn main() -> glib::ExitCode {
         };
 
         ui_ref.present_window(&cli.page);
+        if cli.incomplete {
+            ui_ref.show_incomplete_only();
+        }
         if let Some(id) = cli.edit {
             ui_ref.edit_word(id);
         }
