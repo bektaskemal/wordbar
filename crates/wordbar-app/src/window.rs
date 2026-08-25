@@ -545,25 +545,80 @@ impl Ui {
         }));
         group.add(&rotation);
 
-        // Read-only here: rebinding a global shortcut belongs in the
-        // extension's own preferences, where the Shell can grab keys.
-        let shortcut = adw::ActionRow::builder()
+        group.add(&self.build_shortcut_row(settings));
+        group
+    }
+
+    /// Editable capture shortcut.
+    ///
+    /// Lives here rather than in the extension's own preferences so there is
+    /// one window for every setting; it writes the extension's GSettings, so
+    /// the Shell rebinds the key immediately.
+    fn build_shortcut_row(self: &Rc<Self>, settings: &gio::Settings) -> adw::ActionRow {
+        let row = adw::ActionRow::builder()
             .title("Capture shortcut")
-            .subtitle("Change it in the Wordbar extension preferences")
+            .subtitle("Select a word anywhere, then press this")
             .build();
-        let accelerator = settings
-            .strv("capture-shortcut")
-            .first()
-            .map(|s| s.to_string())
-            .unwrap_or_default();
+
         let label = gtk::ShortcutLabel::builder()
-            .accelerator(&accelerator)
+            .accelerator(current_accelerator(settings))
             .valign(gtk::Align::Center)
             .build();
-        shortcut.add_suffix(&label);
-        group.add(&shortcut);
+        row.add_suffix(&label);
 
-        group
+        let button = gtk::Button::builder()
+            .icon_name("document-edit-symbolic")
+            .valign(gtk::Align::Center)
+            .tooltip_text("Set a new shortcut")
+            .build();
+        button.connect_clicked(clone!(
+            @weak self as ui, @weak label, @strong settings => move |_| {
+                ui.capture_shortcut(&label, &settings);
+            }
+        ));
+        row.add_suffix(&button);
+        row.set_activatable_widget(Some(&button));
+        row
+    }
+
+    /// Grab the next key combination the user presses.
+    fn capture_shortcut(self: &Rc<Self>, label: &gtk::ShortcutLabel, settings: &gio::Settings) {
+        let dialog = adw::MessageDialog::builder()
+            .transient_for(&self.window)
+            .modal(true)
+            .heading("Set capture shortcut")
+            .body("Press the key combination, or Escape to cancel.")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+
+        let controller = gtk::EventControllerKey::new();
+        controller.connect_key_pressed(clone!(
+            @weak dialog, @weak label, @strong settings
+            => @default-return glib::Propagation::Stop,
+            move |_, keyval, keycode, state| {
+                if keyval == gdk::Key::Escape {
+                    dialog.close();
+                    return glib::Propagation::Stop;
+                }
+
+                let mask = state & gtk::accelerator_get_default_mod_mask();
+                // Require a modifier: a bare key would swallow ordinary typing.
+                if mask.is_empty() || !gtk::accelerator_valid(keyval, mask) {
+                    return glib::Propagation::Stop;
+                }
+
+                let accelerator =
+                    gtk::accelerator_name_with_keycode(gdk::Display::NONE, keyval, keycode, mask);
+                if !accelerator.is_empty() {
+                    let _ = settings.set_strv("capture-shortcut", [accelerator.as_str()]);
+                    label.set_accelerator(&accelerator);
+                }
+                dialog.close();
+                glib::Propagation::Stop
+            }
+        ));
+        dialog.add_controller(controller);
+        dialog.present();
     }
 
     fn build_data_group(self: &Rc<Self>) -> adw::PreferencesGroup {
@@ -721,6 +776,14 @@ fn settings() -> Option<gio::Settings> {
     gio::SettingsSchemaSource::default()?
         .lookup(SCHEMA_ID, true)
         .map(|_| gio::Settings::new(SCHEMA_ID))
+}
+
+fn current_accelerator(settings: &gio::Settings) -> String {
+    settings
+        .strv("capture-shortcut")
+        .first()
+        .map(|s| s.to_string())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

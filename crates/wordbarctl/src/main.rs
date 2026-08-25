@@ -103,6 +103,15 @@ enum Command {
         json: bool,
     },
 
+    /// Look a word up again, refreshing its senses and pronunciation.
+    Refresh {
+        /// Term or id. Omit with --all to refresh everything.
+        target: Option<String>,
+        /// Refresh every word, for backfilling after an upgrade.
+        #[arg(long)]
+        all: bool,
+    },
+
     /// Show vocabulary counts.
     Stats {
         #[arg(long)]
@@ -341,6 +350,43 @@ async fn run(cli: Cli) -> zbus::Result<i32> {
                         None => println!("{:width$}  \u{2014}", w.term),
                     }
                 }
+            }
+        }
+
+        Command::Refresh { target, all } => {
+            let ids: Vec<i64> = if all {
+                wordbar
+                    .list_words("all", "")
+                    .await?
+                    .iter()
+                    .filter_map(Word::from_dict)
+                    .map(|w| w.id)
+                    .collect()
+            } else {
+                match resolve(&wordbar, target.as_deref()).await? {
+                    Some(id) => vec![id],
+                    None => return Ok(exit::NOT_FOUND),
+                }
+            };
+
+            let mut refreshed = 0;
+            let mut failed = 0;
+            for id in ids {
+                let term = term_of(&wordbar, id).await;
+                match wordbar.refresh_word(id).await {
+                    Ok(senses) => {
+                        println!("{term}: {senses} sense(s)");
+                        refreshed += 1;
+                    }
+                    Err(err) => {
+                        eprintln!("{term}: {}", describe(&err));
+                        failed += 1;
+                    }
+                }
+            }
+            println!("Refreshed {refreshed}, {failed} failed");
+            if refreshed == 0 && failed > 0 {
+                return Ok(exit::ERROR);
             }
         }
 

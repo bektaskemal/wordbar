@@ -28,6 +28,7 @@ pub trait Wordbar {
     fn mark_learned(&self, id: i64) -> zbus::Result<WordDict>;
     fn restore_word(&self, id: i64) -> zbus::Result<WordDict>;
     fn delete_word(&self, id: i64) -> zbus::Result<()>;
+    fn refresh_word(&self, id: i64) -> zbus::Result<u32>;
     fn update_word(&self, id: i64, fields: HashMap<&str, &str>) -> zbus::Result<WordDict>;
 
     fn list_words(&self, filter: &str, query: &str) -> zbus::Result<Vec<WordDict>>;

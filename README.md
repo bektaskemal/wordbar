@@ -60,7 +60,7 @@ Rules that keep it honest:
 | `wordbar-core` | domain model, normalization, scheduler, selection policy, storage/dictionary traits |
 | `wordbar-service` | SQLite, D-Bus API, background enrichment |
 | `wordbarctl` | CLI D-Bus client; also the backend's debugging tool |
-| `wordbar-app` | GTK4/libadwaita vocabulary manager and preferences |
+| `wordbar-app` | GTK4/libadwaita vocabulary manager, and every setting |
 | `extension/` | GNOME Shell extension (plain modern GJS) |
 
 ## Install
@@ -92,6 +92,8 @@ wordbarctl again                   # FSRS Again, then advance
 wordbarctl know                    # FSRS Good, then advance
 wordbarctl learned                 # archive, then advance
 wordbarctl restore ephemeral
+wordbarctl refresh ephemeral       # look it up again
+wordbarctl refresh --all           # backfill senses after an upgrade
 wordbarctl list --learned
 wordbarctl export --all > vocabulary.json
 wordbarctl import vocabulary.csv
@@ -102,10 +104,32 @@ Exit codes: `0` success, `1` error, `2` not found / nothing to show,
 
 Waybar users: see [doc/waybar.md](doc/waybar.md).
 
+## Definitions and pronunciation
+
+Every sense the dictionary offers is stored, ranked so the word's dominant
+part of speech leads -- otherwise `ephemeral` arrives as a noun, because that
+is how the source lists it. The popup shows a `1/4` stepper when there is a
+real choice, and picking a different sense keeps it.
+
+Pronunciation prefers the dictionary's own recording, cached under
+`~/.local/share/wordbar/audio`, and falls back to speech synthesis when there
+is none. Playback happens in the service, never in the Shell.
+
+Words captured before senses existed have none until you run
+`wordbarctl refresh --all`.
+
+## Settings
+
+All of them live in the manager app -- panel, rotation interval, capture
+shortcut, import and export -- so there is one place to look. It writes the
+extension's GSettings, so the panel applies changes immediately. The
+extension's own preferences page just points at it.
+
 ## Data
 
 ```text
-~/.local/share/wordbar/wordbar.db
+~/.local/share/wordbar/wordbar.db     vocabulary, senses, schedule, history
+~/.local/share/wordbar/audio/         cached pronunciations
 ```
 
 Export is *portable vocabulary* — terms, definitions, examples, parts of

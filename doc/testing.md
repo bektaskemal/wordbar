@@ -68,6 +68,12 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] turning off "Show word in top bar" removes the indicator
 - [ ] rebinding the capture shortcut works and the old binding stops firing
 - [ ] disabling the extension removes the indicator, the timer and the keybinding
+- [ ] a word with several senses shows a `1/4` stepper; stepping changes the definition
+- [ ] the chosen sense survives a rotation away and back
+- [ ] a word with one sense shows no stepper at all
+- [ ] the speaker plays a real recording, and still says something without one
+- [ ] the dot appears only after a whole interval passes unnoticed, and clears on opening
+- [ ] an ignored word holds the panel, then moves on after two held intervals
 
 ## 5. GTK manager — manual
 
@@ -79,3 +85,6 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] import accepts `word`, `word,definition` and the full CSV row
 - [ ] export writes JSON or CSV depending on the chosen filename
 - [ ] with the service unreachable, the window shows an error toast rather than hanging
+- [ ] the editor's sense chooser fills the fields, and Save keeps the choice
+- [ ] changing the capture shortcut here rebinds it in the Shell immediately
+- [ ] the popup's "N words need definitions" hint opens the list filtered to them

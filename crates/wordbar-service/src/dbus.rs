@@ -437,6 +437,32 @@ impl WordbarService {
         Ok(engine.count_incomplete()? as u32)
     }
 
+    /// Look a word up again, replacing its senses, phonetic and recording.
+    ///
+    /// Awaited rather than spawned, unlike enrichment after a capture: the
+    /// caller asked for this and wants to know whether it worked. Needed to
+    /// backfill words captured before senses were stored.
+    async fn refresh_word(&self, id: i64) -> Result<u32, ServiceError> {
+        let term = {
+            let engine = self.engine.lock().await;
+            engine.get_word(id)?.term.clone()
+        };
+
+        let entry = self
+            .dictionary
+            .lookup(&term)
+            .await?
+            .ok_or_else(|| ServiceError::NotFound(format!("no dictionary entry for {term}")))?;
+
+        let count = entry.senses.len() as u32;
+        let effects = {
+            let mut engine = self.engine.lock().await;
+            engine.apply_enrichment(id, &entry, Utc::now())?.effects
+        };
+        self.publish(&effects).await;
+        Ok(count)
+    }
+
     /// Pronounce a word: its dictionary recording if there is one, otherwise
     /// speech synthesis. Playback happens here, never in the Shell.
     async fn speak(&self, id: i64) -> Result<(), ServiceError> {

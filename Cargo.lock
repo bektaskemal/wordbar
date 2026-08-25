@@ -2589,6 +2589,7 @@ dependencies = [
  "async-channel",
  "clap",
  "futures-util",
+ "gdk4",
  "gio",
  "glib",
  "gtk4",
