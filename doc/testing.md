@@ -51,6 +51,7 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] with the service stopped the panel shows `—` and the Shell stays responsive
 - [ ] the panel recovers on its own once the service is reachable again
 - [ ] clicking the word shows the definition immediately, with no second click
+- [ ] a long definition wraps and makes the popup taller, never wider
 - [ ] a word with no definition shows "Definition unavailable" and an "Add definition" link
 - [ ] rotation advances the word after the configured interval
 - [ ] rotation does **not** change the word while its popup is open

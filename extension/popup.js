@@ -5,13 +5,28 @@
  */
 
 import Clutter from 'gi://Clutter';
+import Pango from 'gi://Pango';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 /**
- * The word card: term, part of speech, definition, example, and the three
+ * Make a label wrap rather than stretch.
+ *
+ * `line_wrap` alone does nothing: without a bounded width the label reports a
+ * natural width of the whole string on one line, and the popup grows to match
+ * -- which is how a long definition turned the card into a screen-wide strip.
+ * The bound itself is the card's max-width in the stylesheet.
+ */
+function wrap(label) {
+    label.clutter_text.line_wrap = true;
+    label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+    label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+}
+
+/**
+ * The word card: term, part of speech, definition, example, and the two
  * learning actions.
  */
 export const WordCard = GObject.registerClass({
@@ -35,7 +50,7 @@ export const WordCard = GObject.registerClass({
 
         const header = new St.BoxLayout({style_class: 'wordbar-card-header', x_expand: true});
         this._term = new St.Label({style_class: 'wordbar-term', x_expand: true});
-        this._term.clutter_text.line_wrap = true;
+        wrap(this._term);
         header.add_child(this._term);
 
         // Pronunciation is best-effort (Phase 19): the button only appears
@@ -102,12 +117,18 @@ export const WordCard = GObject.registerClass({
         this._senseRow = senseRow;
         this._senses = [];
 
-        this._definition = new St.Label({style_class: 'wordbar-definition'});
-        this._definition.clutter_text.line_wrap = true;
+        this._definition = new St.Label({
+            style_class: 'wordbar-definition',
+            x_expand: true,
+        });
+        wrap(this._definition);
         this.add_child(this._definition);
 
-        this._example = new St.Label({style_class: 'wordbar-example'});
-        this._example.clutter_text.line_wrap = true;
+        this._example = new St.Label({
+            style_class: 'wordbar-example',
+            x_expand: true,
+        });
+        wrap(this._example);
         this.add_child(this._example);
 
         // Offered instead of an example when enrichment produced nothing, so

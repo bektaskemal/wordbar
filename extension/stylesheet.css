@@ -39,6 +39,9 @@
  * dimming every label to the theme's insensitive colour. */
 .wordbar-card {
     min-width: 300px;
+    /* The bound that makes the labels wrap: without it a long definition
+     * stretches the popup across the screen instead of growing downwards. */
+    max-width: 420px;
     spacing: 4px;
     padding: 6px 12px 2px 12px;
 }
