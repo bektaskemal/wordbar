@@ -430,20 +430,36 @@ export default class WordbarExtension extends Extension {
     }
 
     /**
-     * Stop the background service.
+     * Put Wordbar away: stop the service and remove the indicator.
      *
-     * The panel drops to its unavailable state, honestly: nothing is running.
-     * Anything that touches Wordbar activates it again, so this frees memory
-     * rather than turning it off -- disabling the extension does that.
+     * Leaving a warning icon behind was a confusing half-state -- the user
+     * asked for it to be gone. Disabling the extension is what makes it go,
+     * and since that does not touch the enabled-extensions setting, it comes
+     * back at the next login or whenever it is re-enabled.
      */
     async _quitService() {
+        // Hide first: the service call can take a moment, and the indicator
+        // vanishing is the confirmation.
+        if (this._indicator) {
+            this._indicator.visible = false;
+            this._indicator.container.visible = false;
+        }
+
         try {
             await this._backend.quit();
-            this._indicator?.setAvailable(false);
-            showToast(_('Wordbar stopped'), null, 3);
         } catch (error) {
             this._logFailure('stopping the service', error);
         }
+
+        // On idle, so we are not torn down from inside our own callback.
+        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            try {
+                Main.extensionManager.disableExtension(this.uuid);
+            } catch (error) {
+                this._logFailure('disabling the extension', error);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     async _openManager(method) {

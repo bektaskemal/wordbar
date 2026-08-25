@@ -120,7 +120,9 @@ export const WordbarIndicator = GObject.registerClass({
         add(_('Vocabulary…'), 'vocabulary-requested');
         add(_('Preferences…'), 'preferences-requested');
         this._contextMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        add(_('Quit Wordbar'), 'quit-requested');
+        // Named for what actually happens, since the way back is otherwise
+        // not obvious once the indicator has gone.
+        add(_('Quit until next login'), 'quit-requested');
     }
 
     _buildMenu() {
@@ -137,6 +139,10 @@ export const WordbarIndicator = GObject.registerClass({
         this._card.connect('speak-requested', () => this._emitForWord('speak-requested'));
         this._card.connect('sense-selected', (_c, id) => this.emit('sense-selected', id));
         this._card.connect('sense-reset', () => this.emit('sense-reset'));
+        this._card.connect('add-requested', () => {
+            this.menu.close();
+            this.emit('add-requested');
+        });
         this._card.connect('edit-requested', () => this._emitForWord('edit-requested'));
 
         // No "Next word" item on purpose: all three ratings advance, and a real

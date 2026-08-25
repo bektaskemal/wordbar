@@ -149,6 +149,10 @@
     border-color: rgba(53, 132, 228, 0.9);
 }
 
+.wordbar-action-add {
+    margin-top: 4px;
+}
+
 .wordbar-action-again:hover,
 .wordbar-action-again:focus {
     background-color: rgba(200, 110, 60, 0.5);

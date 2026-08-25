@@ -6,8 +6,11 @@ several early choices were made while a bug made the alternative look broken.
 
 ## The review loop
 
-**An empty vocabulary shows no rating buttons.** There is nothing to rate, and
-a greyed-out pair still reads as something you failed to use.
+**An empty vocabulary shows no rating buttons**, but does offer "+ Add word".
+There is nothing to rate, and a greyed-out pair still reads as something you
+failed to use -- while an empty card is exactly where a newcomer is looking, so
+it has to offer the way in. Once there are words, adding lives in the
+right-click menu.
 
 **Two ratings: Again and Know.** Not the full FSRS four. A glanceable panel is
 not a flashcard app, and a judgement call between Hard and Good on every word
@@ -59,10 +62,16 @@ undiscoverable, since nothing in GNOME advertises a right-click action on a
 panel item -- mitigated by a pointer in the empty-state popup, which is where a
 new user looks, and by the menu being the only place these are named.
 
-**Quit stops the service, not Wordbar.** It is D-Bus activated, so anything
-that touches it starts it again; Quit frees its memory and the panel says so by
-dropping to its unavailable state. Turning Wordbar off for good means disabling
-the extension, which is where GNOME expects that control to be.
+**Quit puts Wordbar away until the next login.** It stops the service and
+disables the extension, so the indicator goes rather than sitting there in a
+warning state -- which was a confusing half-measure when the user had asked for
+it to be gone. Disabling does not touch the enabled-extensions setting, so it
+returns at the next login or whenever it is re-enabled, and the menu item says
+so.
+
+Asking a stopped service to stop is also a no-op rather than a paradox: a D-Bus
+call activates the service to deliver it, so an unguarded Quit would start
+Wordbar just to tell it to stop.
 
 ## Capture
 
@@ -91,7 +100,9 @@ stuck, not repeat what changed.
 **A reset returns to the sense the card opened with.** It appears only once the
 selection has moved, so there is always something to go back to, and it makes
 stepping through senses safe to explore: committing on every step would
-otherwise be a trap.
+otherwise be a trap. It sits to the left of the arrows and keeps its space
+whether or not it applies -- appearing between them would slide them under the
+pointer that just clicked one, so the next step would land on reset instead.
 
 **The "needs a definition" view announces itself.** Opening the manager from
 the popup's hint filters the list, and that filter shows a banner with a way

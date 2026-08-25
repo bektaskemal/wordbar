@@ -22,6 +22,7 @@ export const WordCard = GObject.registerClass({
         'speak-requested': {},
         'sense-selected': {param_types: [GObject.TYPE_INT64]},
         'sense-reset': {},
+        'add-requested': {},
         'edit-requested': {},
     },
 }, class WordCard extends St.BoxLayout {
@@ -59,6 +60,20 @@ export const WordCard = GObject.registerClass({
         });
         senseRow.add_child(this._partOfSpeech);
 
+        // Left of the arrows, and always occupying its space: appearing
+        // between the arrows would slide them under the pointer that just
+        // clicked one, so the next step would land on reset instead.
+        this._resetSense = new St.Button({
+            style_class: 'wordbar-sense-reset',
+            child: new St.Icon({icon_name: 'edit-undo-symbolic', icon_size: 13}),
+            can_focus: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            opacity: 0,
+            reactive: false,
+        });
+        this._resetSense.connect('clicked', () => this.emit('sense-reset'));
+        senseRow.add_child(this._resetSense);
+
         this._prevSense = new St.Button({
             style_class: 'wordbar-sense-step',
             label: '\u2039',
@@ -82,18 +97,6 @@ export const WordCard = GObject.registerClass({
         });
         this._nextSense.connect('clicked', () => this._stepSense(1));
         senseRow.add_child(this._nextSense);
-
-        // Only appears once you have moved away from the sense the card
-        // opened with, so there is always something to go back to.
-        this._resetSense = new St.Button({
-            style_class: 'wordbar-sense-reset',
-            child: new St.Icon({icon_name: 'edit-undo-symbolic', icon_size: 13}),
-            can_focus: true,
-            visible: false,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._resetSense.connect('clicked', () => this.emit('sense-reset'));
-        senseRow.add_child(this._resetSense);
 
         this.add_child(senseRow);
         this._senseRow = senseRow;
@@ -128,6 +131,19 @@ export const WordCard = GObject.registerClass({
             this._actions.add_child(button);
         this.add_child(this._actions);
 
+        // Shown only when there is nothing to review: with no words, the card
+        // is the one place a newcomer is looking, so it has to offer the way
+        // in. Once there are words, adding lives in the right-click menu.
+        this._addWord = new St.Button({
+            style_class: 'wordbar-action wordbar-action-add',
+            label: _('+ Add word'),
+            x_expand: true,
+            can_focus: true,
+            visible: false,
+        });
+        this._addWord.connect('clicked', () => this.emit('add-requested'));
+        this.add_child(this._addWord);
+
         this._word = null;
     }
 
@@ -143,17 +159,19 @@ export const WordCard = GObject.registerClass({
         for (const actor of [this._prevSense, this._nextSense, this._senseCount])
             actor.visible = many;
 
-        if (!many) {
-            this._resetSense.visible = false;
+        this._resetSense.visible = many;
+        if (!many)
             return;
-        }
 
         const index = this._senses.findIndex(s => s.selected);
         this._senseCount.text = `${index < 0 ? 1 : index + 1}/${this._senses.length}`;
 
         const selected = this._senses[index]?.id ?? null;
-        this._resetSense.visible =
+        const canReset =
             baselineId !== null && selected !== null && selected !== baselineId;
+        this._resetSense.opacity = canReset ? 255 : 0;
+        this._resetSense.reactive = canReset;
+        this._resetSense.can_focus = canReset;
     }
 
     _stepSense(delta) {
@@ -198,10 +216,12 @@ export const WordCard = GObject.registerClass({
             // Hidden, not greyed out: there is nothing to rate, and a dimmed
             // pair of buttons still reads as something you failed to use.
             this._actions.visible = false;
+            this._addWord.visible = true;
             return;
         }
 
         this._actions.visible = true;
+        this._addWord.visible = false;
 
         this._term.text = word.term;
 

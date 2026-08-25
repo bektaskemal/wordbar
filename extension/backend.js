@@ -346,8 +346,16 @@ export const Backend = GObject.registerClass({
         await this._call('OpenPreferences');
     }
 
-    /* Stop the service. It is D-Bus activated, so the next call restarts it. */
+    /**
+     * Stop the service, if it is running.
+     *
+     * The guard matters: a D-Bus call *activates* the service to deliver it,
+     * so asking a stopped Wordbar to stop would start it first. Nothing to
+     * stop means nothing to do.
+     */
     async quit() {
+        if (!this._proxy || !this._proxy.g_name_owner)
+            return;
         await this._call('Quit');
     }
 

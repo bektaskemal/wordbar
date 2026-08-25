@@ -97,5 +97,6 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] searching or switching Active/Learned also leaves the filter
 - [ ] right-click offers Add word, Vocabulary, Preferences and Quit
 - [ ] with no words the popup shows no rating buttons at all
-- [ ] Quit stops the service and the panel shows its warning icon
-- [ ] anything afterwards re-activates the service and the word returns
+- [ ] Quit removes the indicator entirely, and it returns after a logout
+- [ ] with no words the popup offers "+ Add word"
+- [ ] the sense reset sits left of the arrows and never shifts them
