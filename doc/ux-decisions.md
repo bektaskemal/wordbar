@@ -127,7 +127,15 @@ carries a quiet count that opens the manager filtered to them, so they are
 fixed in one sitting. Prompting at capture time would interrupt exactly when
 the user wanted to keep reading -- and offline, every capture would interrupt.
 
-**Enrichment can never fail a capture.** It runs after the word is stored.
+**Enrichment can never fail a capture.** It runs after the word is stored, and
+imported words are looked up the same way -- sequentially and paced, since an
+import can be hundreds of words and a free dictionary API deserves better than
+a burst.
+
+**A lookup never overwrites an example you brought.** The sentence you met a
+word in, imported from a Kindle or typed by hand, is irreplaceable; a
+dictionary's example is not. A definition you supplied survives too, unless you
+ask for a re-lookup explicitly.
 
 ## Pronunciation
 

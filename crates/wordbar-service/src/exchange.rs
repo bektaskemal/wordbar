@@ -75,18 +75,23 @@ pub fn export(engine: &Engine, filter: WordFilter, format: Format) -> Result<Str
     }
 }
 
+/// Import words, reporting what happened and which words were created.
+///
+/// The ids matter: an imported word usually arrives bare, so the caller has to
+/// know what to look up afterwards.
 pub fn import(
     engine: &mut Engine,
     data: &str,
     format: Format,
     now: DateTime<Utc>,
-) -> Result<ImportReport> {
+) -> Result<(ImportReport, Vec<wordbar_core::WordId>)> {
     let words = match format {
         Format::Json => parse_json(data)?,
         Format::Csv => parse_csv(data),
     };
 
     let mut report = ImportReport::default();
+    let mut added = Vec::new();
     for word in words {
         let new = NewWord {
             term: word.term,
@@ -97,13 +102,19 @@ pub fn import(
             audio_url: None,
         };
         match engine.add_word_full(new, now) {
-            Ok(_) => report.added += 1,
+            Ok(outcome) => {
+                report.added += 1;
+                // Only worth a lookup when the file did not supply one.
+                if outcome.value.is_incomplete() {
+                    added.push(outcome.value.id);
+                }
+            }
             Err(Error::DuplicateTerm(_)) => report.duplicates += 1,
             // A bad row must never abort the whole import.
             Err(_) => report.invalid += 1,
         }
     }
-    Ok(report)
+    Ok((report, added))
 }
 
 fn parse_json(data: &str) -> Result<Vec<PortableWord>> {
@@ -234,6 +245,28 @@ mod tests {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].definition, words[0].definition);
         assert_eq!(parsed[0].example, words[0].example);
+    }
+
+    #[test]
+    fn import_reports_which_words_need_looking_up() {
+        let store = crate::SqliteStore::open_in_memory().unwrap();
+        let mut e = crate::Engine::new(Box::new(store));
+        let (report, needing) = import(
+            &mut e,
+            "ephemeral\nlaconic,using few words\n",
+            Format::Csv,
+            chrono::Utc::now(),
+        )
+        .unwrap();
+
+        assert_eq!(report.added, 2);
+        assert_eq!(
+            needing.len(),
+            1,
+            "only the word that arrived without a definition needs a lookup"
+        );
+        let word = e.get_word(needing[0]).unwrap();
+        assert_eq!(word.term, "ephemeral");
     }
 
     #[test]

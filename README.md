@@ -104,6 +104,22 @@ Exit codes: `0` success, `1` error, `2` not found / nothing to show,
 
 Waybar users: see [doc/waybar.md](doc/waybar.md).
 
+## Importing from a Kindle
+
+The Kindle's Vocabulary Builder keeps every word you looked up in
+`system/vocabulary/vocab.db` on the device -- `system` is hidden, so turn on
+hidden files after plugging it in. Copy that file off and convert it:
+
+```bash
+./scripts/kindle-vocab.py vocab.db > kindle.csv
+wordbarctl import kindle.csv
+```
+
+Definitions are left to Wordbar, which looks each word up itself. What the
+Kindle contributes is the sentence you met the word in, kept as the example --
+the part no dictionary can give you. Words are exported in their base form, and
+ones you marked as mastered on the device are skipped; `--help` covers the rest.
+
 ## Learning and known
 
 The vocabulary splits itself. A word counts as **known** once FSRS has pushed

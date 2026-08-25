@@ -166,7 +166,12 @@ impl WordbarService {
             let effects = {
                 let mut engine = engine.lock().await;
                 // The word may have been deleted while we were on the network.
-                match engine.apply_enrichment(id, &entry, Utc::now()) {
+                match engine.apply_enrichment_with(
+                    id,
+                    &entry,
+                    Utc::now(),
+                    crate::engine::Enrichment::FillGaps,
+                ) {
                     Ok(outcome) => outcome.effects,
                     Err(err) => {
                         tracing::info!(id, %err, "enrichment update skipped");
@@ -182,6 +187,69 @@ impl WordbarService {
                 let _ = Self::word_updated(&emitter, updated).await;
                 let _ = Self::vocabulary_changed(&emitter).await;
             }
+        });
+    }
+}
+
+impl WordbarService {
+    /// Look up many words in the background, one at a time.
+    ///
+    /// Sequential and paced on purpose: an import can be hundreds of words,
+    /// and firing that many requests at a free dictionary API at once would be
+    /// rude and would mostly earn rate limiting.
+    fn spawn_bulk_enrichment(&self, ids: Vec<WordId>) {
+        if ids.is_empty() {
+            return;
+        }
+
+        let engine = Arc::clone(&self.engine);
+        let dictionary = Arc::clone(&self.dictionary);
+        let connection = self.connection.clone();
+
+        tokio::spawn(async move {
+            tracing::info!(count = ids.len(), "looking up imported words");
+            for id in ids {
+                let term = {
+                    let engine = engine.lock().await;
+                    match engine.get_word(id) {
+                        Ok(word) => word.term.clone(),
+                        // Deleted while the queue was draining.
+                        Err(_) => continue,
+                    }
+                };
+
+                match dictionary.lookup(&term).await {
+                    Ok(Some(entry)) => {
+                        let effects = {
+                            let mut engine = engine.lock().await;
+                            match engine.apply_enrichment_with(
+                                id,
+                                &entry,
+                                Utc::now(),
+                                crate::engine::Enrichment::FillGaps,
+                            ) {
+                                Ok(outcome) => outcome.effects,
+                                Err(err) => {
+                                    tracing::info!(id, %err, "enrichment skipped");
+                                    continue;
+                                }
+                            }
+                        };
+                        if let (Ok(emitter), Some(updated)) = (
+                            SignalEmitter::new(&connection, OBJECT_PATH),
+                            effects.word_updated,
+                        ) {
+                            let _ = Self::word_updated(&emitter, updated).await;
+                            let _ = Self::vocabulary_changed(&emitter).await;
+                        }
+                    }
+                    Ok(None) => tracing::debug!(%term, "no dictionary entry"),
+                    Err(err) => tracing::info!(%term, %err, "lookup failed"),
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
+            tracing::info!("finished looking up imported words");
         });
     }
 }
@@ -395,10 +463,14 @@ impl WordbarService {
     ) -> Result<(u32, u32, u32), ServiceError> {
         let format = Format::parse(format)
             .ok_or_else(|| ServiceError::InvalidTerm("format must be json or csv".into()))?;
-        let report = {
+        let (report, needing_lookup) = {
             let mut engine = self.engine.lock().await;
             exchange::import(&mut engine, data, format, Utc::now())?
         };
+
+        // An imported list is usually bare words, so look them up just as a
+        // capture does. Without this an import stayed definitionless forever.
+        self.spawn_bulk_enrichment(needing_lookup);
         self.publish(&Effects {
             vocabulary_changed: report.added > 0,
             ..Effects::default()

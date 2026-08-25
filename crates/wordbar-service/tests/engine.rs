@@ -553,3 +553,107 @@ fn search_respects_the_split() {
         1
     );
 }
+
+#[test]
+fn enrichment_never_overwrites_an_example_you_brought() {
+    use wordbar_core::NewWord;
+
+    let mut e = engine();
+    // As an import from a Kindle would arrive: the sentence you met it in.
+    let word = e
+        .add_word_full(
+            NewWord {
+                term: "ephemeral".into(),
+                example: Some("The effects were ephemeral.".into()),
+                ..NewWord::default()
+            },
+            t0(),
+        )
+        .unwrap()
+        .value;
+
+    e.apply_enrichment(
+        word.id,
+        &entry(&[(
+            "adjective",
+            "Lasting a short time.",
+            Some("A dictionary example."),
+        )]),
+        t0(),
+    )
+    .unwrap();
+
+    let after = e.get_word(word.id).unwrap();
+    assert_eq!(
+        after.example.as_deref(),
+        Some("The effects were ephemeral."),
+        "the sentence you met the word in is irreplaceable; a dictionary's is not"
+    );
+    assert_eq!(after.definition.as_deref(), Some("Lasting a short time."));
+}
+
+#[test]
+fn filling_gaps_keeps_a_definition_you_supplied() {
+    use wordbar_core::NewWord;
+    use wordbar_service::engine::Enrichment;
+
+    let mut e = engine();
+    let word = e
+        .add_word_full(
+            NewWord {
+                term: "ephemeral".into(),
+                definition: Some("my own wording".into()),
+                ..NewWord::default()
+            },
+            t0(),
+        )
+        .unwrap()
+        .value;
+
+    e.apply_enrichment_with(
+        word.id,
+        &entry(&[("adjective", "Lasting a short time.", None)]),
+        t0(),
+        Enrichment::FillGaps,
+    )
+    .unwrap();
+
+    assert_eq!(
+        e.get_word(word.id).unwrap().definition.as_deref(),
+        Some("my own wording")
+    );
+    // The senses are still recorded, so it can be switched later.
+    assert_eq!(e.list_senses(word.id).unwrap().len(), 1);
+}
+
+#[test]
+fn an_explicit_refresh_does_replace_the_definition() {
+    use wordbar_core::NewWord;
+    use wordbar_service::engine::Enrichment;
+
+    let mut e = engine();
+    let word = e
+        .add_word_full(
+            NewWord {
+                term: "ephemeral".into(),
+                definition: Some("stale".into()),
+                ..NewWord::default()
+            },
+            t0(),
+        )
+        .unwrap()
+        .value;
+
+    e.apply_enrichment_with(
+        word.id,
+        &entry(&[("adjective", "Lasting a short time.", None)]),
+        t0(),
+        Enrichment::Replace,
+    )
+    .unwrap();
+
+    assert_eq!(
+        e.get_word(word.id).unwrap().definition.as_deref(),
+        Some("Lasting a short time.")
+    );
+}

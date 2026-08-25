@@ -83,6 +83,16 @@ pub struct Engine {
     rng: StdRng,
 }
 
+/// How a lookup result should treat what the word already has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Enrichment {
+    /// Fill in what is missing. Used after a capture or an import, where the
+    /// user may have supplied their own definition.
+    FillGaps,
+    /// Replace the dictionary's own fields, for an explicit re-lookup.
+    Replace,
+}
+
 impl Engine {
     pub fn new(store: Box<dyn Storage>) -> Self {
         Self {
@@ -155,7 +165,17 @@ impl Engine {
         entry: &DictionaryEntry,
         now: DateTime<Utc>,
     ) -> Result<Outcome<Word>> {
-        self.get_word(id)?;
+        self.apply_enrichment_with(id, entry, now, Enrichment::Replace)
+    }
+
+    pub fn apply_enrichment_with(
+        &mut self,
+        id: WordId,
+        entry: &DictionaryEntry,
+        now: DateTime<Utc>,
+        mode: Enrichment,
+    ) -> Result<Outcome<Word>> {
+        let existing = self.get_word(id)?;
 
         let senses: Vec<NewSense> = entry
             .senses
@@ -176,9 +196,22 @@ impl Engine {
             ..WordPatch::default()
         };
         if let Some(primary) = entry.primary() {
-            patch.definition = Some(Some(primary.definition.clone()));
-            patch.example = Some(primary.example.clone());
-            patch.part_of_speech = Some(primary.part_of_speech.clone());
+            let keep_definition = mode == Enrichment::FillGaps && !existing.is_incomplete();
+            if !keep_definition {
+                patch.definition = Some(Some(primary.definition.clone()));
+                patch.part_of_speech = Some(primary.part_of_speech.clone());
+            }
+
+            // An example the user already has is never replaced, in either
+            // mode. A sentence imported from wherever they met the word is
+            // irreplaceable; a dictionary's is not.
+            let has_example = existing
+                .example
+                .as_deref()
+                .is_some_and(|e| !e.trim().is_empty());
+            if !has_example {
+                patch.example = Some(primary.example.clone());
+            }
         }
 
         let word = self.store.update_word(id, patch, now)?;
