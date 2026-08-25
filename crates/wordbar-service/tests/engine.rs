@@ -322,3 +322,140 @@ fn the_full_backend_workflow() {
     e.restore_word(found.id, now).unwrap();
     assert_eq!(e.current_word(now).unwrap().value.unwrap().id, id);
 }
+
+// -- senses ---------------------------------------------------------------
+
+fn entry(senses: &[(&str, &str, Option<&str>)]) -> wordbar_core::DictionaryEntry {
+    wordbar_core::DictionaryEntry {
+        senses: senses
+            .iter()
+            .map(|(pos, definition, example)| wordbar_core::EntrySense {
+                part_of_speech: Some(pos.to_string()),
+                definition: definition.to_string(),
+                example: example.map(str::to_string),
+            })
+            .collect(),
+        phonetic: Some("/test/".into()),
+        audio_url: Some("https://example.test/a.mp3".into()),
+    }
+}
+
+#[test]
+fn enrichment_keeps_every_sense_and_shows_the_first() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+
+    e.apply_enrichment(
+        id,
+        &entry(&[
+            (
+                "adjective",
+                "Lasting a short time.",
+                Some("It was ephemeral."),
+            ),
+            ("noun", "Something short-lived.", None),
+        ]),
+        t0(),
+    )
+    .unwrap();
+
+    let word = e.get_word(id).unwrap();
+    assert_eq!(word.definition.as_deref(), Some("Lasting a short time."));
+    assert_eq!(word.part_of_speech.as_deref(), Some("adjective"));
+    assert_eq!(word.phonetic.as_deref(), Some("/test/"));
+    assert!(!word.is_incomplete());
+
+    let senses = e.list_senses(id).unwrap();
+    assert_eq!(senses.len(), 2, "both senses are kept");
+    assert_eq!(senses[0].position, 0);
+    assert!(senses[0].is_selected(&word));
+    assert!(!senses[1].is_selected(&word));
+}
+
+#[test]
+fn switching_sense_sticks() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    e.apply_enrichment(
+        id,
+        &entry(&[
+            ("adjective", "Lasting a short time.", None),
+            ("noun", "Something short-lived.", None),
+        ]),
+        t0(),
+    )
+    .unwrap();
+
+    let senses = e.list_senses(id).unwrap();
+    let noun = senses
+        .iter()
+        .find(|s| s.part_of_speech.as_deref() == Some("noun"))
+        .unwrap();
+
+    let outcome = e.select_sense(noun.id, t0()).unwrap();
+    assert_eq!(
+        outcome.value.definition.as_deref(),
+        Some("Something short-lived.")
+    );
+    assert_eq!(outcome.effects.word_updated, Some(id));
+
+    // Persisted, not a preview.
+    let reread = e.get_word(id).unwrap();
+    assert_eq!(reread.definition.as_deref(), Some("Something short-lived."));
+    assert_eq!(reread.part_of_speech.as_deref(), Some("noun"));
+
+    let senses = e.list_senses(id).unwrap();
+    assert!(senses
+        .iter()
+        .find(|s| s.id == noun.id)
+        .unwrap()
+        .is_selected(&reread));
+}
+
+#[test]
+fn a_fresh_lookup_replaces_the_previous_senses() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    e.apply_enrichment(id, &entry(&[("noun", "Old.", None)]), t0())
+        .unwrap();
+    assert_eq!(e.list_senses(id).unwrap().len(), 1);
+
+    e.apply_enrichment(
+        id,
+        &entry(&[
+            ("adjective", "New one.", None),
+            ("adjective", "New two.", None),
+        ]),
+        t0(),
+    )
+    .unwrap();
+
+    let senses = e.list_senses(id).unwrap();
+    assert_eq!(senses.len(), 2);
+    assert!(senses.iter().all(|s| s.definition.starts_with("New")));
+}
+
+#[test]
+fn senses_go_when_the_word_does() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    e.apply_enrichment(id, &entry(&[("noun", "A thing.", None)]), t0())
+        .unwrap();
+
+    e.delete_word(id).unwrap();
+    assert!(e.list_senses(id).unwrap().is_empty());
+}
+
+#[test]
+fn selecting_an_unknown_sense_is_refused() {
+    let mut e = engine();
+    assert!(e.select_sense(9999, t0()).is_err());
+}
+
+#[test]
+fn a_word_with_no_senses_still_works() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    assert!(e.list_senses(id).unwrap().is_empty());
+    assert!(e.get_word(id).unwrap().is_incomplete());
+}

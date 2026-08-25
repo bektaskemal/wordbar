@@ -7,12 +7,16 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::client::EditFields;
-use crate::word::Word;
+use crate::word::{Sense, Word};
 
 /// Present the dialog. `on_save` receives the edited fields.
+/// `senses` are the word's alternatives; choosing one fills the fields in, so
+/// a wrong dictionary pick is corrected by picking rather than retyping.
+/// Nothing is stored until Save, which is what an editor should do.
 pub fn present(
     parent: &impl IsA<gtk::Window>,
     word: &Word,
+    senses: &[Sense],
     on_save: impl Fn(EditFields) + 'static,
 ) {
     let dialog = adw::Window::builder()
@@ -38,7 +42,34 @@ pub fn present(
     let part_of_speech = entry_row("Part of speech", &word.part_of_speech);
     let definition = entry_row("Definition", &word.definition);
     let example = entry_row("Example", &word.example);
-    for row in [&term, &part_of_speech, &definition, &example] {
+
+    group.add(&term);
+
+    // Only worth showing when the dictionary actually offered a choice.
+    if senses.len() > 1 {
+        let labels: Vec<String> = senses.iter().map(|s| truncate(&s.summary, 70)).collect();
+        let model = gtk::StringList::new(&labels.iter().map(String::as_str).collect::<Vec<_>>());
+        let chooser = adw::ComboRow::builder()
+            .title("Sense")
+            .subtitle("Pick one to fill in the fields below")
+            .model(&model)
+            .build();
+        let selected = senses.iter().position(|s| s.selected).unwrap_or(0);
+        chooser.set_selected(selected as u32);
+
+        let owned: Vec<Sense> = senses.to_vec();
+        chooser.connect_selected_notify(glib::clone!(
+            @weak part_of_speech, @weak definition, @weak example => move |row| {
+                let Some(sense) = owned.get(row.selected() as usize) else { return };
+                part_of_speech.set_text(&sense.part_of_speech);
+                definition.set_text(&sense.definition);
+                example.set_text(&sense.example);
+            }
+        ));
+        group.add(&chooser);
+    }
+
+    for row in [&part_of_speech, &definition, &example] {
         group.add(row);
     }
 
@@ -78,4 +109,13 @@ fn entry_row(title: &str, value: &str) -> adw::EntryRow {
     let row = adw::EntryRow::builder().title(title).build();
     row.set_text(value);
     row
+}
+
+/// Keep a chooser row readable; dictionary senses can be long.
+fn truncate(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
+        return text.to_string();
+    }
+    let kept: String = text.chars().take(limit.saturating_sub(1)).collect();
+    format!("{kept}\u{2026}")
 }

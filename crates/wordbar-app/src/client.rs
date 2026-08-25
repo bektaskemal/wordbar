@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use async_channel::{Receiver, Sender};
 use zbus::proxy;
 
-use crate::word::{Word, WordDict};
+use crate::word::{Sense, Word, WordDict};
 
 #[proxy(
     interface = "org.wordbar.Wordbar",
@@ -20,6 +20,7 @@ use crate::word::{Word, WordDict};
 trait Wordbar {
     fn add_word(&self, text: &str) -> zbus::Result<WordDict>;
     fn get_word_details(&self, id: i64) -> zbus::Result<WordDict>;
+    fn list_senses(&self, id: i64) -> zbus::Result<Vec<WordDict>>;
     fn update_word(&self, id: i64, fields: HashMap<&str, &str>) -> zbus::Result<WordDict>;
     fn mark_learned(&self, id: i64) -> zbus::Result<WordDict>;
     fn restore_word(&self, id: i64) -> zbus::Result<WordDict>;
@@ -55,6 +56,10 @@ enum Request {
     Get {
         id: i64,
         reply: Sender<Result<Word, String>>,
+    },
+    Senses {
+        id: i64,
+        reply: Sender<Result<Vec<Sense>, String>>,
     },
     Add {
         text: String,
@@ -158,6 +163,11 @@ impl Client {
         self.request(|reply| Request::Get { id, reply }).await
     }
 
+    /// Every sense recorded for a word, best-ranked first.
+    pub async fn senses(&self, id: i64) -> Result<Vec<Sense>, String> {
+        self.request(|reply| Request::Senses { id, reply }).await
+    }
+
     pub async fn add(&self, text: &str) -> Result<Word, String> {
         let text = text.to_string();
         self.request(|reply| Request::Add { text, reply }).await
@@ -256,6 +266,14 @@ async fn handle(proxy: &WordbarProxy<'_>, request: Request) {
                 .send(proxy.get_stats().await.map_err(|e| describe(&e)))
                 .await;
         }
+        Request::Senses { id, reply } => {
+            let result = proxy
+                .list_senses(id)
+                .await
+                .map(|dicts| dicts.iter().filter_map(Sense::from_dict).collect())
+                .map_err(|e| describe(&e));
+            let _ = reply.send(result).await;
+        }
         Request::Get { id, reply } => {
             let result = proxy
                 .get_word_details(id)
@@ -352,6 +370,7 @@ async fn drain_with_error(requests: Receiver<Request>, message: String) {
             Request::List { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Stats { reply } => drop(reply.send(Err(message)).await),
             Request::Get { reply, .. } => drop(reply.send(Err(message)).await),
+            Request::Senses { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Add { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Update { reply, .. } => drop(reply.send(Err(message)).await),
             Request::MarkLearned { reply, .. } => drop(reply.send(Err(message)).await),

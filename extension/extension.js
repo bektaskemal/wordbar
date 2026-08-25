@@ -88,6 +88,7 @@ export default class WordbarExtension extends Extension {
         // "Add definition" opens that word's editor, not the whole list.
         indicator.connect('edit-requested', (_i, id) => this._editWord(id));
         indicator.connect('speak-requested', (_i, id) => this._speak(id));
+        indicator.connect('sense-selected', (_i, senseId) => this._selectSense(senseId));
 
         // Opening the popup is what "seen" means: you have been given the
         // chance to recall this word, so the panel may move on.
@@ -192,6 +193,45 @@ export default class WordbarExtension extends Extension {
         this._advance();
     }
 
+    /** Fetch the alternative senses for the word on screen. */
+    async _loadSenses(id) {
+        if (id === null) {
+            this._indicator?.setSenses([]);
+            return;
+        }
+        try {
+            const senses = await this._backend.listSenses(id);
+            // The panel may have moved on while we were waiting.
+            if (this._indicator?.currentWord?.id === id)
+                this._indicator.setSenses(senses);
+        } catch (error) {
+            this._indicator?.setSenses([]);
+            this._logFailure('listing senses', error);
+        }
+    }
+
+    /**
+     * Switch the word to another of its senses.
+     *
+     * Confirmed with a toast, because the change persists -- silently
+     * rewriting the stored definition would be a surprise.
+     */
+    async _selectSense(senseId) {
+        try {
+            const word = await this._backend.selectSense(senseId);
+            if (!word)
+                return;
+            this._indicator?.setWord(word);
+            await this._loadSenses(word.id);
+            const pos = word.part_of_speech;
+            showToast(pos
+                ? _('Now using the %s sense').replace('%s', pos)
+                : _('Sense changed'));
+        } catch (error) {
+            this._logFailure('selecting a sense', error);
+        }
+    }
+
     /** Record that the current word has been looked at, and clear its dot. */
     _markSeen() {
         this._seen = true;
@@ -215,6 +255,7 @@ export default class WordbarExtension extends Extension {
         this._indicator?.setWord(word);
         // A newly arrived word carries no dot: it has not been missed yet.
         this._indicator?.setWaiting(this._holds > 0 && !this._seen);
+        this._loadSenses(word?.id ?? null);
     }
 
     // -- backend calls ----------------------------------------------------
@@ -254,6 +295,9 @@ export default class WordbarExtension extends Extension {
             if (word && this._indicator?.currentWord?.id === id) {
                 // Same word, enriched: keep the seen state, only refresh content.
                 this._indicator.setWord(word);
+                // Senses arrive with enrichment, i.e. after the word first
+                // appeared, so they have to be picked up here too.
+                this._loadSenses(id);
             }
         } catch (error) {
             this._logFailure('refreshing word details', error);

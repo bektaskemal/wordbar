@@ -147,3 +147,37 @@ pub struct Review {
     pub rating: Rating,
     pub reviewed_at: DateTime<Utc>,
 }
+
+/// One dictionary sense of a word.
+///
+/// Words keep every sense the dictionary offered; the one currently shown is
+/// copied onto the [`Word`] itself so the panel and every client keep reading
+/// a single definition without needing to know about senses at all.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Sense {
+    pub id: SenseId,
+    pub word_id: WordId,
+    /// Rank within the word, 0 first. Set by [`crate::rank_senses`].
+    pub position: i64,
+    pub part_of_speech: Option<String>,
+    pub definition: String,
+    pub example: Option<String>,
+}
+
+/// Primary key of a [`Sense`].
+pub type SenseId = i64;
+
+impl Sense {
+    /// True when this sense is the one currently shown for its word.
+    pub fn is_selected(&self, word: &Word) -> bool {
+        word.definition.as_deref() == Some(self.definition.as_str())
+    }
+
+    /// "adjective · lasting for a very short time", for a chooser.
+    pub fn summary(&self) -> String {
+        match &self.part_of_speech {
+            Some(pos) if !pos.is_empty() => format!("{pos} \u{b7} {}", self.definition),
+            _ => self.definition.clone(),
+        }
+    }
+}

@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::error::Result;
-use crate::model::{Rating, Review, ReviewCard, Word, WordId, WordStatus};
+use crate::model::{Rating, Review, ReviewCard, Sense, SenseId, Word, WordId, WordStatus};
 use crate::select::DisplayCandidate;
 
 /// Everything needed to create a vocabulary entry.
@@ -50,6 +50,14 @@ impl WordPatch {
             && self.part_of_speech.is_none()
             && self.phonetic.is_none()
     }
+}
+
+/// A sense about to be stored, before it has an id.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct NewSense {
+    pub part_of_speech: Option<String>,
+    pub definition: String,
+    pub example: Option<String>,
 }
 
 /// Which slice of the vocabulary to list.
@@ -105,6 +113,12 @@ pub trait Storage: Send {
     }
     fn search_words(&self, query: &str, filter: WordFilter) -> Result<Vec<Word>>;
     fn count_words(&self, filter: WordFilter) -> Result<usize>;
+
+    /// Replace a word's senses wholesale, in rank order. Enrichment owns this
+    /// list, so a fresh lookup supersedes the previous one entirely.
+    fn replace_senses(&mut self, word_id: WordId, senses: &[NewSense]) -> Result<()>;
+    fn list_senses(&self, word_id: WordId) -> Result<Vec<Sense>>;
+    fn get_sense(&self, id: SenseId) -> Result<Option<Sense>>;
 
     fn get_card(&self, word_id: WordId) -> Result<Option<ReviewCard>>;
     fn save_card(&mut self, card: &ReviewCard) -> Result<()>;

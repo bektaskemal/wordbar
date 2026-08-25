@@ -8,7 +8,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use wordbar_core::{DictionaryEntry, DictionaryProvider, Error, Result};
+use wordbar_core::{
+    rank_senses, DictionaryEntry, DictionaryProvider, EntrySense, Error, RankedSense, Result,
+};
 
 const ENDPOINT: &str = "https://api.dictionaryapi.dev/api/v2/entries/en";
 const TIMEOUT: Duration = Duration::from_secs(8);
@@ -68,31 +70,36 @@ impl DictionaryProvider for FreeDictionary {
     }
 }
 
-/// Flatten the API's nested shape into the single best definition we show.
+/// Flatten the API's nested shape into every sense it offered, ranked.
+///
+/// Nothing is discarded: a wrong pick should be a switch in the popup, not a
+/// retype, so the alternatives have to survive the lookup.
 fn convert(entries: &[ApiEntry]) -> Option<DictionaryEntry> {
     let entry = entries.first()?;
 
-    let usable = |m: &&ApiMeaning| {
-        m.definitions
-            .iter()
-            .any(|d| !d.definition.trim().is_empty())
-    };
-
-    // A sense that ships an example makes a much better card, so prefer one
-    // even when the source lists it second; otherwise take the first sense
-    // that has a definition at all.
-    let meaning = entry
+    let senses: Vec<RankedSense> = entry
         .meanings
         .iter()
-        .find(|m| usable(m) && m.definitions.iter().any(|d| d.example.is_some()))
-        .or_else(|| entry.meanings.iter().find(usable));
-
-    let definition = meaning.and_then(|m| {
-        m.definitions
-            .iter()
-            .find(|d| d.example.is_some())
-            .or_else(|| m.definitions.first())
-    });
+        .flat_map(|meaning| {
+            meaning.definitions.iter().filter_map(move |definition| {
+                let text = definition.definition.trim();
+                if text.is_empty() {
+                    return None;
+                }
+                Some(RankedSense {
+                    part_of_speech: Some(meaning.part_of_speech.clone()).filter(|p| !p.is_empty()),
+                    definition: text.to_string(),
+                    // An example only helps when it is a real sentence; the API
+                    // sometimes returns fragments shorter than the term itself.
+                    example: definition
+                        .example
+                        .clone()
+                        .map(|e| e.trim().to_string())
+                        .filter(|e| e.len() > 3),
+                })
+            })
+        })
+        .collect();
 
     let phonetic = entry
         .phonetic
@@ -104,17 +111,15 @@ fn convert(entries: &[ApiEntry]) -> Option<DictionaryEntry> {
         .iter()
         .find_map(|p| p.audio.clone().filter(|a| !a.trim().is_empty()));
 
-    // An example only helps when it is a real sentence; the API sometimes
-    // returns fragments shorter than the term itself.
-    let example = definition
-        .and_then(|d| d.example.clone())
-        .map(|e| e.trim().to_string())
-        .filter(|e| e.len() > 3);
-
     let result = DictionaryEntry {
-        definition: definition.map(|d| d.definition.trim().to_string()),
-        example,
-        part_of_speech: meaning.map(|m| m.part_of_speech.clone()),
+        senses: rank_senses(senses)
+            .into_iter()
+            .map(|s| EntrySense {
+                part_of_speech: s.part_of_speech,
+                definition: s.definition,
+                example: s.example,
+            })
+            .collect(),
         phonetic: phonetic
             .map(|p| p.trim().to_string())
             .filter(|p| !p.is_empty()),
@@ -190,13 +195,11 @@ mod tests {
     fn converts_a_full_response() {
         let entries: Vec<ApiEntry> = serde_json::from_str(SAMPLE).unwrap();
         let entry = convert(&entries).expect("entry");
+        let primary = entry.primary().expect("a sense");
+        assert_eq!(primary.definition, "Lasting for a very short time.");
+        assert_eq!(primary.part_of_speech.as_deref(), Some("adjective"));
         assert_eq!(
-            entry.definition.as_deref(),
-            Some("Lasting for a very short time.")
-        );
-        assert_eq!(entry.part_of_speech.as_deref(), Some("adjective"));
-        assert_eq!(
-            entry.example.as_deref(),
+            primary.example.as_deref(),
             Some("The opportunity was ephemeral.")
         );
         assert_eq!(
@@ -218,34 +221,31 @@ mod tests {
             r#"[{"meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A thing."}]}]}]"#;
         let entries: Vec<ApiEntry> = serde_json::from_str(json).unwrap();
         let entry = convert(&entries).expect("entry");
-        assert_eq!(entry.definition.as_deref(), Some("A thing."));
-        assert!(entry.example.is_none());
+        let primary = entry.primary().unwrap();
+        assert_eq!(primary.definition, "A thing.");
+        assert!(primary.example.is_none());
         assert!(entry.phonetic.is_none());
     }
 
+    /// The real ephemeral response: the API lists its single noun sense first.
     #[test]
-    fn a_sense_with_an_example_wins_over_an_earlier_bare_one() {
+    fn every_sense_survives_and_the_dominant_one_leads() {
         let json = r#"[{"meanings":[
-            {"partOfSpeech":"noun","definitions":[{"definition":"A short-lived thing."}]},
+            {"partOfSpeech":"noun","definitions":[{"definition":"Something short-lived."}]},
             {"partOfSpeech":"adjective","definitions":[
-                {"definition":"Lasting a short time.","example":"An ephemeral fashion."}]}
+                {"definition":"Lasting a short time."},
+                {"definition":"Existing for only one day."},
+                {"definition":"Usually dry."}]}
         ]}]"#;
         let entries: Vec<ApiEntry> = serde_json::from_str(json).unwrap();
         let entry = convert(&entries).expect("entry");
-        assert_eq!(entry.part_of_speech.as_deref(), Some("adjective"));
-        assert_eq!(entry.example.as_deref(), Some("An ephemeral fashion."));
-    }
 
-    #[test]
-    fn without_examples_the_first_sense_is_used() {
-        let json = r#"[{"meanings":[
-            {"partOfSpeech":"noun","definitions":[{"definition":"A short-lived thing."}]},
-            {"partOfSpeech":"adjective","definitions":[{"definition":"Lasting a short time."}]}
-        ]}]"#;
-        let entries: Vec<ApiEntry> = serde_json::from_str(json).unwrap();
-        let entry = convert(&entries).expect("entry");
-        assert_eq!(entry.part_of_speech.as_deref(), Some("noun"));
-        assert!(entry.example.is_none());
+        assert_eq!(entry.senses.len(), 4, "nothing is discarded");
+        assert_eq!(
+            entry.primary().unwrap().part_of_speech.as_deref(),
+            Some("adjective"),
+            "the noun sense must not lead just because it was listed first"
+        );
     }
 
     #[test]

@@ -11,10 +11,16 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    sql: include_str!("../../migrations/001_initial.sql"),
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        sql: include_str!("../../migrations/001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        sql: include_str!("../../migrations/002_senses.sql"),
+    },
+];
 
 /// The schema version this build expects.
 pub fn latest_version() -> i64 {

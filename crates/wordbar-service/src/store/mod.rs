@@ -10,8 +10,8 @@ use std::path::Path;
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use wordbar_core::{
-    normalize_term, DisplayCandidate, Error, NewWord, Rating, Result, Review, ReviewCard, Storage,
-    Word, WordFilter, WordId, WordPatch, WordStatus,
+    normalize_term, DisplayCandidate, Error, NewSense, NewWord, Rating, Result, Review, ReviewCard,
+    Sense, SenseId, Storage, Word, WordFilter, WordId, WordPatch, WordStatus,
 };
 
 const META_CURRENT_WORD: &str = "current_word_id";
@@ -71,6 +71,8 @@ impl SqliteStore {
 
 const WORD_COLUMNS: &str = "id, term, normalized_term, definition, example, part_of_speech, \
                             phonetic, status, created_at, updated_at, last_displayed_at";
+
+const SENSE_COLUMNS: &str = "id, word_id, position, part_of_speech, definition, example";
 
 const CARD_COLUMNS: &str = "word_id, due, stability, difficulty, elapsed_days, scheduled_days, \
                             reps, lapses, state, last_review";
@@ -247,6 +249,49 @@ impl Storage for SqliteStore {
         self.conn
             .query_row(&sql, [], |r| r.get::<_, i64>(0))
             .map(|n| n as usize)
+            .map_err(sql_err)
+    }
+
+    fn replace_senses(&mut self, word_id: WordId, senses: &[NewSense]) -> Result<()> {
+        let tx = self.conn.transaction().map_err(sql_err)?;
+        tx.execute("DELETE FROM senses WHERE word_id = ?1", [word_id])
+            .map_err(sql_err)?;
+        for (position, sense) in senses.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO senses (word_id, position, part_of_speech, definition, example)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    word_id,
+                    position as i64,
+                    blank_to_none(sense.part_of_speech.clone()),
+                    sense.definition.trim(),
+                    blank_to_none(sense.example.clone()),
+                ],
+            )
+            .map_err(sql_err)?;
+        }
+        tx.commit().map_err(sql_err)
+    }
+
+    fn list_senses(&self, word_id: WordId) -> Result<Vec<Sense>> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!(
+                "SELECT {SENSE_COLUMNS} FROM senses WHERE word_id = ?1 ORDER BY position"
+            ))
+            .map_err(sql_err)?;
+        let rows = stmt.query_map([word_id], row_to_sense).map_err(sql_err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(sql_err)
+    }
+
+    fn get_sense(&self, id: SenseId) -> Result<Option<Sense>> {
+        self.conn
+            .query_row(
+                &format!("SELECT {SENSE_COLUMNS} FROM senses WHERE id = ?1"),
+                [id],
+                row_to_sense,
+            )
+            .optional()
             .map_err(sql_err)
     }
 
@@ -431,6 +476,17 @@ fn row_to_word(row: &Row) -> rusqlite::Result<Word> {
         created_at: parse_ts(row, 8)?,
         updated_at: parse_ts(row, 9)?,
         last_displayed_at: parse_ts_opt(row, 10)?,
+    })
+}
+
+fn row_to_sense(row: &Row) -> rusqlite::Result<Sense> {
+    Ok(Sense {
+        id: row.get(0)?,
+        word_id: row.get(1)?,
+        position: row.get(2)?,
+        part_of_speech: row.get(3)?,
+        definition: row.get(4)?,
+        example: row.get(5)?,
     })
 }
 

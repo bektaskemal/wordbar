@@ -53,6 +53,14 @@ const IFACE = `
     <method name="OpenWordEditor">
       <arg name="id" type="x" direction="in"/>
     </method>
+    <method name="ListSenses">
+      <arg name="id" type="x" direction="in"/>
+      <arg type="aa{sv}" direction="out"/>
+    </method>
+    <method name="SelectSense">
+      <arg name="sense_id" type="x" direction="in"/>
+      <arg type="a{sv}" direction="out"/>
+    </method>
     <method name="OpenIncomplete"/>
     <method name="CountIncomplete">
       <arg type="u" direction="out"/>
@@ -112,6 +120,19 @@ export function unpackWord(variant) {
         word[key] = value instanceof GLib.Variant ? value.deepUnpack() : value;
     }
     return word.term ? word : null;
+}
+
+/** Unpack one `a{sv}` sense into a plain object. */
+function unpackSense(variant) {
+    const raw = variant?.deepUnpack ? variant.deepUnpack() : variant;
+    if (!raw)
+        return null;
+    const sense = {};
+    for (const key of Object.keys(raw)) {
+        const value = raw[key];
+        sense[key] = value instanceof GLib.Variant ? value.deepUnpack() : value;
+    }
+    return sense.definition ? sense : null;
 }
 
 /**
@@ -300,6 +321,16 @@ export const Backend = GObject.registerClass({
 
     async openWordEditor(id) {
         await this._call('OpenWordEditor', id);
+    }
+
+    async listSenses(id) {
+        const [senses] = await this._call('ListSenses', id);
+        return senses.map(unpackSense).filter(s => s !== null);
+    }
+
+    async selectSense(senseId) {
+        const [word] = await this._call('SelectSense', senseId);
+        return unpackWord(word);
     }
 
     async openIncomplete() {

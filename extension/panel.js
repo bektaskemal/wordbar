@@ -38,6 +38,7 @@ export const WordbarIndicator = GObject.registerClass({
         'vocabulary-requested': {},
         'incomplete-requested': {},
         'speak-requested': {param_types: [GObject.TYPE_INT64]},
+        'sense-selected': {param_types: [GObject.TYPE_INT64]},
         'edit-requested': {param_types: [GObject.TYPE_INT64]},
         'popup-opened': {},
         'popup-closed': {},
@@ -97,6 +98,7 @@ export const WordbarIndicator = GObject.registerClass({
         this._card.connect('rated-again', () => this._emitForWord('rated-again'));
         this._card.connect('rated-know', () => this._emitForWord('rated-know'));
         this._card.connect('speak-requested', () => this._emitForWord('speak-requested'));
+        this._card.connect('sense-selected', (_c, id) => this.emit('sense-selected', id));
         this._card.connect('edit-requested', () => this._emitForWord('edit-requested'));
 
         // No "Next word" item on purpose: all three ratings advance, and a real
@@ -185,6 +187,11 @@ export const WordbarIndicator = GObject.registerClass({
     setWaiting(waiting) {
         this._waiting = waiting;
         this._renderLabel();
+    }
+
+    /** Offer the current word's alternative senses in the card. */
+    setSenses(senses) {
+        this._card.setSenses(senses);
     }
 
     /** Show how many words still need a definition, or hide the row. */

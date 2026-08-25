@@ -8,24 +8,35 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
-/// What a provider can tell us about a term. Every field is optional because
-/// sources differ in completeness.
+/// What a provider can tell us about a term.
+///
+/// Every sense is carried, ranked by [`crate::rank_senses`], because a single
+/// stored definition picks the wrong one often enough to matter -- and a wrong
+/// pick should be a switch, not a retype.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DictionaryEntry {
-    pub definition: Option<String>,
-    pub example: Option<String>,
-    pub part_of_speech: Option<String>,
+    pub senses: Vec<EntrySense>,
     pub phonetic: Option<String>,
-    /// URL of a pronunciation clip, when the source offers one.
+    /// URL of a pronunciation recording, when the source offers one.
     pub audio_url: Option<String>,
+}
+
+/// One sense of a looked-up term.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct EntrySense {
+    pub part_of_speech: Option<String>,
+    pub definition: String,
+    pub example: Option<String>,
 }
 
 impl DictionaryEntry {
     pub fn is_empty(&self) -> bool {
-        self.definition.is_none()
-            && self.example.is_none()
-            && self.part_of_speech.is_none()
-            && self.phonetic.is_none()
+        self.senses.is_empty() && self.phonetic.is_none() && self.audio_url.is_none()
+    }
+
+    /// The sense to show, i.e. the best-ranked one.
+    pub fn primary(&self) -> Option<&EntrySense> {
+        self.senses.first()
     }
 }
 

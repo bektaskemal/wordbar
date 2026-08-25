@@ -8,8 +8,9 @@ use chrono::{DateTime, Utc};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use wordbar_core::{
-    select_display_word, Error, FsrsScheduler, NewWord, Rating, Result, Review, ReviewCard,
-    Scheduler, SelectionPolicy, Storage, Word, WordFilter, WordId, WordPatch, WordStatus,
+    select_display_word, DictionaryEntry, Error, FsrsScheduler, NewSense, NewWord, Rating, Result,
+    Review, ReviewCard, Scheduler, SelectionPolicy, Sense, SenseId, Storage, Word, WordFilter,
+    WordId, WordPatch, WordStatus,
 };
 
 /// Things that happened as a result of a call, for the caller to turn into
@@ -143,6 +144,68 @@ impl Engine {
     ) -> Result<Outcome<Word>> {
         let word = self.store.update_word(id, patch, now)?;
         Ok(Outcome::new(word, Effects::updated(id)))
+    }
+
+    // -- senses ----------------------------------------------------------
+
+    /// Store a lookup result: every sense, plus the best one shown on the word.
+    pub fn apply_enrichment(
+        &mut self,
+        id: WordId,
+        entry: &DictionaryEntry,
+        now: DateTime<Utc>,
+    ) -> Result<Outcome<Word>> {
+        self.get_word(id)?;
+
+        let senses: Vec<NewSense> = entry
+            .senses
+            .iter()
+            .map(|s| NewSense {
+                part_of_speech: s.part_of_speech.clone(),
+                definition: s.definition.clone(),
+                example: s.example.clone(),
+            })
+            .collect();
+        self.store.replace_senses(id, &senses)?;
+
+        // Show the best-ranked sense. Enrichment is authoritative here: it only
+        // runs just after a capture, before anyone could have chosen a sense.
+        let mut patch = WordPatch {
+            phonetic: entry.phonetic.clone().map(Some),
+            ..WordPatch::default()
+        };
+        if let Some(primary) = entry.primary() {
+            patch.definition = Some(Some(primary.definition.clone()));
+            patch.example = Some(primary.example.clone());
+            patch.part_of_speech = Some(primary.part_of_speech.clone());
+        }
+
+        let word = self.store.update_word(id, patch, now)?;
+        Ok(Outcome::new(word, Effects::updated(id)))
+    }
+
+    pub fn list_senses(&self, id: WordId) -> Result<Vec<Sense>> {
+        self.store.list_senses(id)
+    }
+
+    /// Show a different sense of a word, and keep it that way.
+    ///
+    /// Switching is how a wrong pick gets corrected, so it persists rather
+    /// than acting as a preview.
+    pub fn select_sense(&mut self, sense_id: SenseId, now: DateTime<Utc>) -> Result<Outcome<Word>> {
+        let sense = self
+            .store
+            .get_sense(sense_id)?
+            .ok_or(Error::UnknownWord(sense_id))?;
+
+        let patch = WordPatch {
+            definition: Some(Some(sense.definition.clone())),
+            example: Some(sense.example.clone()),
+            part_of_speech: Some(sense.part_of_speech.clone()),
+            ..WordPatch::default()
+        };
+        let word = self.store.update_word(sense.word_id, patch, now)?;
+        Ok(Outcome::new(word, Effects::updated(sense.word_id)))
     }
 
     pub fn list_words(&self, filter: WordFilter, query: &str) -> Result<Vec<Word>> {

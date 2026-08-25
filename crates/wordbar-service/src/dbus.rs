@@ -159,21 +159,10 @@ impl WordbarService {
                 }
             };
 
-            let patch = WordPatch {
-                definition: entry.definition.map(Some),
-                example: entry.example.map(Some),
-                part_of_speech: entry.part_of_speech.map(Some),
-                phonetic: entry.phonetic.map(Some),
-                ..WordPatch::default()
-            };
-            if patch.is_empty() {
-                return;
-            }
-
             let effects = {
                 let mut engine = engine.lock().await;
                 // The word may have been deleted while we were on the network.
-                match engine.update_word(id, patch, Utc::now()) {
+                match engine.apply_enrichment(id, &entry, Utc::now()) {
                     Ok(outcome) => outcome.effects,
                     Err(err) => {
                         tracing::info!(id, %err, "enrichment update skipped");
@@ -314,6 +303,48 @@ impl WordbarService {
         let outcome = {
             let mut engine = self.engine.lock().await;
             engine.update_word(id, patch, Utc::now())?
+        };
+        let word = self.settle(outcome).await;
+        Ok(self.dict(Some(&word)).await)
+    }
+
+    /// Every sense recorded for a word, best-ranked first. Each carries
+    /// `selected`, so a chooser can mark the one on show.
+    async fn list_senses(&self, id: i64) -> Result<Vec<WordDict>, ServiceError> {
+        let engine = self.engine.lock().await;
+        let word = engine.get_word(id)?;
+        Ok(engine
+            .list_senses(id)?
+            .iter()
+            .map(|sense| {
+                let mut dict = WordDict::new();
+                insert(&mut dict, "id", sense.id);
+                insert(&mut dict, "word_id", sense.word_id);
+                insert(&mut dict, "position", sense.position);
+                insert(&mut dict, "definition", sense.definition.clone());
+                insert(
+                    &mut dict,
+                    "part_of_speech",
+                    sense.part_of_speech.clone().unwrap_or_default(),
+                );
+                insert(
+                    &mut dict,
+                    "example",
+                    sense.example.clone().unwrap_or_default(),
+                );
+                insert(&mut dict, "summary", sense.summary());
+                insert(&mut dict, "selected", sense.is_selected(&word));
+                dict
+            })
+            .collect())
+    }
+
+    /// Show a different sense of a word from now on. Switching is how a wrong
+    /// pick is corrected, so it persists rather than previewing.
+    async fn select_sense(&self, sense_id: i64) -> Result<WordDict, ServiceError> {
+        let outcome = {
+            let mut engine = self.engine.lock().await;
+            engine.select_sense(sense_id, Utc::now())?
         };
         let word = self.settle(outcome).await;
         Ok(self.dict(Some(&word)).await)

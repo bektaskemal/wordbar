@@ -5,7 +5,11 @@ use wordbar_service::{Engine, SqliteStore};
 
 #[test]
 fn measure_due_dot_frequency() {
-    for (label, knows) in [("fresh vocabulary", 0), ("lightly reviewed", 3), ("well reviewed", 8)] {
+    for (label, knows) in [
+        ("fresh vocabulary", 0),
+        ("lightly reviewed", 3),
+        ("well reviewed", 8),
+    ] {
         let store = SqliteStore::open_in_memory().unwrap();
         let mut e = Engine::with_seed(Box::new(store), 11);
         e.set_policy(SelectionPolicy::default());

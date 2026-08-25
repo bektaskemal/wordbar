@@ -371,10 +371,21 @@ impl Ui {
         });
     }
 
+    /// Open the editor, fetching the word's senses first so the chooser is
+    /// populated when the dialog appears.
     fn present_editor(self: &Rc<Self>, word: &Word) {
+        let ui = Rc::clone(self);
+        let word = word.clone();
+        glib::spawn_future_local(async move {
+            let senses = ui.client.senses(word.id).await.unwrap_or_default();
+            ui.present_editor_with(&word, &senses);
+        });
+    }
+
+    fn present_editor_with(self: &Rc<Self>, word: &Word, senses: &[crate::word::Sense]) {
         let id = word.id;
         let ui = Rc::clone(self);
-        edit::present(&self.window, word, move |fields| {
+        edit::present(&self.window, word, senses, move |fields| {
             let ui = Rc::clone(&ui);
             glib::spawn_future_local(async move {
                 match ui.client.update(id, fields).await {

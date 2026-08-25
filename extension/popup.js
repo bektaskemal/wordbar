@@ -20,6 +20,7 @@ export const WordCard = GObject.registerClass({
         'rated-again': {},
         'rated-know': {},
         'speak-requested': {},
+        'sense-selected': {param_types: [GObject.TYPE_INT64]},
         'edit-requested': {},
     },
 }, class WordCard extends St.BoxLayout {
@@ -47,8 +48,43 @@ export const WordCard = GObject.registerClass({
         header.add_child(this._speaker);
         this.add_child(header);
 
-        this._partOfSpeech = new St.Label({style_class: 'wordbar-part-of-speech'});
-        this.add_child(this._partOfSpeech);
+        // Part of speech, plus a switcher when the dictionary gave more than
+        // one sense. A wrong pick should be one click to fix, not a retype.
+        const senseRow = new St.BoxLayout({style_class: 'wordbar-sense-row'});
+        this._partOfSpeech = new St.Label({
+            style_class: 'wordbar-part-of-speech',
+            y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true,
+        });
+        senseRow.add_child(this._partOfSpeech);
+
+        this._prevSense = new St.Button({
+            style_class: 'wordbar-sense-step',
+            label: '\u2039',
+            can_focus: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._prevSense.connect('clicked', () => this._stepSense(-1));
+        senseRow.add_child(this._prevSense);
+
+        this._senseCount = new St.Label({
+            style_class: 'wordbar-sense-count',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        senseRow.add_child(this._senseCount);
+
+        this._nextSense = new St.Button({
+            style_class: 'wordbar-sense-step',
+            label: '\u203a',
+            can_focus: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._nextSense.connect('clicked', () => this._stepSense(1));
+        senseRow.add_child(this._nextSense);
+
+        this.add_child(senseRow);
+        this._senseRow = senseRow;
+        this._senses = [];
 
         this._definition = new St.Label({style_class: 'wordbar-definition'});
         this._definition.clutter_text.line_wrap = true;
@@ -82,6 +118,32 @@ export const WordCard = GObject.registerClass({
         this._word = null;
     }
 
+    /**
+     * Offer the word's other senses.
+     *
+     * Hidden entirely for a single sense, which is the common case; the
+     * switcher must not become permanent furniture.
+     */
+    setSenses(senses) {
+        this._senses = senses ?? [];
+        const many = this._senses.length > 1;
+        for (const actor of [this._prevSense, this._nextSense, this._senseCount])
+            actor.visible = many;
+        if (!many)
+            return;
+
+        const index = this._senses.findIndex(s => s.selected);
+        this._senseCount.text = `${index < 0 ? 1 : index + 1}/${this._senses.length}`;
+    }
+
+    _stepSense(delta) {
+        if (this._senses.length < 2)
+            return;
+        const current = this._senses.findIndex(s => s.selected);
+        const next = (Math.max(0, current) + delta + this._senses.length) % this._senses.length;
+        this.emit('sense-selected', this._senses[next].id);
+    }
+
     _actionButton(label, styleClass, signal) {
         const button = new St.Button({
             style_class: `wordbar-action ${styleClass}`,
@@ -103,7 +165,8 @@ export const WordCard = GObject.registerClass({
 
         if (!word) {
             this._term.text = _('No words yet');
-            this._partOfSpeech.visible = false;
+            this._senseRow.visible = false;
+            this.setSenses([]);
             this._definition.text = _(
                 'Select a word anywhere and press Super+Shift+V to add it.\n' +
                 'Right-click this indicator to open Wordbar.'
@@ -121,7 +184,7 @@ export const WordCard = GObject.registerClass({
 
         const partOfSpeech = word.part_of_speech || '';
         this._partOfSpeech.text = partOfSpeech;
-        this._partOfSpeech.visible = partOfSpeech !== '';
+        this._senseRow.visible = partOfSpeech !== '' || this._senses.length > 1;
 
         const definition = word.definition || '';
         // Phase 18: a word with no definition is still perfectly usable.

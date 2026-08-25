@@ -56,3 +56,37 @@ fn text(dict: &WordDict, key: &str) -> String {
         .unwrap_or_default()
         .to_string()
 }
+
+/// One alternative sense of a word, for the editor's chooser.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Sense {
+    pub id: i64,
+    pub summary: String,
+    pub part_of_speech: String,
+    pub definition: String,
+    pub example: String,
+    pub selected: bool,
+}
+
+impl Sense {
+    pub fn from_dict(dict: &WordDict) -> Option<Self> {
+        let definition = text(dict, "definition");
+        if definition.is_empty() {
+            return None;
+        }
+        Some(Self {
+            id: dict
+                .get("id")
+                .and_then(|v| i64::try_from(v).ok())
+                .unwrap_or_default(),
+            summary: text(dict, "summary"),
+            part_of_speech: text(dict, "part_of_speech"),
+            definition,
+            example: text(dict, "example"),
+            selected: dict
+                .get("selected")
+                .and_then(|v| bool::try_from(v).ok())
+                .unwrap_or(false),
+        })
+    }
+}
