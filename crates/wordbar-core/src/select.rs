@@ -173,6 +173,7 @@ mod tests {
                 example: None,
                 part_of_speech: None,
                 phonetic: None,
+                audio_url: None,
                 status,
                 created_at: now() - Duration::days(365),
                 updated_at: now() - Duration::days(365),
