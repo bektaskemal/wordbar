@@ -18,6 +18,7 @@ use crate::word::Word;
 /// The extension's schema. Preferences are stored there so the panel picks
 /// changes up immediately, with no second source of truth.
 const SCHEMA_ID: &str = "org.gnome.shell.extensions.wordbar";
+const EXTENSION_UUID: &str = "wordbar@kemalbektas.dev";
 const ROTATION_OPTIONS: [i32; 5] = [5, 10, 15, 30, 60];
 
 pub struct Ui {
@@ -770,12 +771,64 @@ fn format_for(path: &std::path::Path) -> &'static str {
     }
 }
 
-/// The extension's schema may not be installed; preferences degrade to a note
-/// rather than crashing the app.
+/// Open the extension's settings.
+///
+/// A GNOME Shell extension compiles its schema inside its own directory, which
+/// the Shell knows to look in but the default GSettings source does not -- so
+/// the schema has to be loaded from there by hand. Falls back to the default
+/// source in case Wordbar was installed system-wide, and returns None when the
+/// extension really is absent, so preferences degrade to a note.
 fn settings() -> Option<gio::Settings> {
-    gio::SettingsSchemaSource::default()?
-        .lookup(SCHEMA_ID, true)
-        .map(|_| gio::Settings::new(SCHEMA_ID))
+    if let Some(schema) =
+        gio::SettingsSchemaSource::default().and_then(|s| s.lookup(SCHEMA_ID, true))
+    {
+        return Some(settings_for(&schema));
+    }
+
+    for dir in extension_schema_dirs() {
+        let Ok(source) = gio::SettingsSchemaSource::from_directory(
+            &dir,
+            gio::SettingsSchemaSource::default().as_ref(),
+            true,
+        ) else {
+            continue;
+        };
+        if let Some(schema) = source.lookup(SCHEMA_ID, true) {
+            return Some(settings_for(&schema));
+        }
+    }
+
+    None
+}
+
+fn settings_for(schema: &gio::SettingsSchema) -> gio::Settings {
+    gio::Settings::new_full(schema, None::<&gio::SettingsBackend>, None)
+}
+
+/// Where the extension might be installed, user location first.
+fn extension_schema_dirs() -> Vec<std::path::PathBuf> {
+    let suffix = format!("gnome-shell/extensions/{EXTENSION_UUID}/schemas");
+    let mut dirs = vec![glib::user_data_dir().join(&suffix)];
+
+    // Also the literal default, because we may be launched with an
+    // XDG_DATA_HOME that is not the one the extension was installed under --
+    // a sandboxed terminal, for instance.
+    if let Some(home) = glib::home_dir().to_str() {
+        dirs.push(
+            std::path::Path::new(home)
+                .join(".local/share")
+                .join(&suffix),
+        );
+    }
+
+    dirs.extend(
+        glib::system_data_dirs()
+            .into_iter()
+            .map(|d| d.join(&suffix)),
+    );
+    dirs.retain(|d| d.is_dir());
+    dirs.dedup();
+    dirs
 }
 
 fn current_accelerator(settings: &gio::Settings) -> String {
