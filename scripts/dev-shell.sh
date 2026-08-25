@@ -52,9 +52,6 @@ trap 'rm -rf "$WORK"' EXIT
 # it, which then silently stops the dev Shell from enabling it too.
 export XDG_CONFIG_HOME="$WORK/config"
 mkdir -p "$XDG_CONFIG_HOME"
-gsettings set org.gnome.shell disable-user-extensions false
-gsettings set org.gnome.shell enabled-extensions "['$EXTENSION_UUID']"
-gsettings set org.gnome.shell disabled-extensions "[]"
 
 if [[ $REAL_DATA -eq 0 ]]; then
     export WORDBAR_DATA_DIR="$WORK/db"
@@ -69,5 +66,18 @@ export MUTTER_DEBUG_DUMMY_MODE_SPECS="${MUTTER_DEBUG_DUMMY_MODE_SPECS:-1280x800}
 # A private session bus: otherwise the nested Shell fights the real one over
 # org.gnome.Shell. wordbar-service is activated on it from
 # ~/.local/share/dbus-1/services, exactly as in a real session.
+# Seed the settings from INSIDE the private bus. A gsettings write out here
+# would be handled by the live session's dconf service, which ignores our
+# XDG_CONFIG_HOME -- so it would miss the isolated store entirely and instead
+# overwrite the real session's extension list.
+cat > "$WORK/launch-shell" <<EOF
+#!/usr/bin/env bash
+gsettings set org.gnome.shell disable-user-extensions false
+gsettings set org.gnome.shell enabled-extensions "['$EXTENSION_UUID']"
+gsettings set org.gnome.shell disabled-extensions "[]"
+exec gnome-shell --nested --wayland
+EOF
+chmod +x "$WORK/launch-shell"
+
 echo "starting nested GNOME Shell -- close its window to quit"
-exec dbus-run-session -- gnome-shell --nested --wayland
+exec dbus-run-session -- "$WORK/launch-shell"
