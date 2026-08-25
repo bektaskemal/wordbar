@@ -72,9 +72,14 @@ hijacking the panel.
 and switchable from both the popup and the manager. A single stored sense
 picked the noun reading of "ephemeral", which is not what anyone means by it.
 
-**Switching sense sticks.** Switching is how a wrong pick gets corrected, so it
-becomes that word's sense and the panel uses it from then on, confirmed briefly
-so the persistence is not a surprise.
+**Switching sense sticks**, confirmed with a brief "New default" -- the new
+sense is already visible in the card, so the toast only has to say that it
+stuck, not repeat what changed.
+
+**A reset returns to the sense the card opened with.** It appears only once the
+selection has moved, so there is always something to go back to, and it makes
+stepping through senses safe to explore: committing on every step would
+otherwise be a trap.
 
 **Words with no definition are collected, not prompted for.** The popup footer
 carries a quiet count that opens the manager filtered to them, so they are

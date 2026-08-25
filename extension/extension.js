@@ -36,6 +36,8 @@ export default class WordbarExtension extends Extension {
         this._currentId = null;
         this._seen = false;
         this._holds = 0;
+        // The sense the card opened with, so a switch can be undone.
+        this._senseBaseline = null;
 
         this._backend = new Backend();
         this._indicator = new WordbarIndicator(this._settings.get_int('max-panel-chars'));
@@ -88,6 +90,7 @@ export default class WordbarExtension extends Extension {
         indicator.connect('edit-requested', (_i, id) => this._editWord(id));
         indicator.connect('speak-requested', (_i, id) => this._speak(id));
         indicator.connect('sense-selected', (_i, senseId) => this._selectSense(senseId));
+        indicator.connect('sense-reset', () => this._resetSense());
 
         // Opening the popup is what "seen" means: you have been given the
         // chance to recall this word, so the panel may move on.
@@ -195,16 +198,26 @@ export default class WordbarExtension extends Extension {
     /** Fetch the alternative senses for the word on screen. */
     async _loadSenses(id) {
         if (id === null) {
-            this._indicator?.setSenses([]);
+            this._senses = [];
+            this._indicator?.setSenses([], null);
             return;
         }
         try {
             const senses = await this._backend.listSenses(id);
             // The panel may have moved on while we were waiting.
-            if (this._indicator?.currentWord?.id === id)
-                this._indicator.setSenses(senses);
+            if (this._indicator?.currentWord?.id !== id)
+                return;
+
+            this._senses = senses;
+            // A card already open when senses arrive still counts as opened on
+            // whatever they show now.
+            if (this._senseBaseline === null && this._indicator?.isMenuOpen)
+                this._captureSenseBaseline();
+            else
+                this._indicator?.setSenses(senses, this._senseBaseline);
         } catch (error) {
-            this._indicator?.setSenses([]);
+            this._senses = [];
+            this._indicator?.setSenses([], null);
             this._logFailure('listing senses', error);
         }
     }
@@ -212,20 +225,22 @@ export default class WordbarExtension extends Extension {
     /**
      * Switch the word to another of its senses.
      *
-     * Confirmed with a toast, because the change persists -- silently
-     * rewriting the stored definition would be a surprise.
+     * Confirmed briefly, because the change persists -- silently rewriting the
+     * stored definition would be a surprise. The new sense is already visible
+     * in the card, so the toast only has to say that it stuck.
      */
     async _selectSense(senseId) {
+        await this._applySense(senseId, _('New default'));
+    }
+
+    async _applySense(senseId, message) {
         try {
             const word = await this._backend.selectSense(senseId);
             if (!word)
                 return;
             this._indicator?.setWord(word);
             await this._loadSenses(word.id);
-            const pos = word.part_of_speech;
-            showToast(pos
-                ? _('Now using the %s sense').replace('%s', pos)
-                : _('Sense changed'));
+            showToast(message, null, 3);
         } catch (error) {
             this._logFailure('selecting a sense', error);
         }
@@ -236,6 +251,28 @@ export default class WordbarExtension extends Extension {
         this._seen = true;
         this._holds = 0;
         this._indicator?.setWaiting(false);
+        // Opening the card is what "last time" means for the reset button.
+        this._captureSenseBaseline();
+    }
+
+    /**
+     * Remember which sense is showing as the card opens.
+     *
+     * Senses can arrive after the popup is already open, for a word captured
+     * moments ago, so this is called again when they load.
+     */
+    _captureSenseBaseline() {
+        const senses = this._senses ?? [];
+        const selected = senses.find(sense => sense.selected);
+        this._senseBaseline = selected ? selected.id : null;
+        this._indicator?.setSenses(senses, this._senseBaseline);
+    }
+
+    /** Go back to the sense the card opened with. */
+    async _resetSense() {
+        if (this._senseBaseline === null)
+            return;
+        await this._applySense(this._senseBaseline, _('Reverted'));
     }
 
     /**
@@ -250,6 +287,8 @@ export default class WordbarExtension extends Extension {
             this._currentId = id;
             this._seen = false;
             this._holds = 0;
+            this._senseBaseline = null;
+            this._senses = [];
         }
         this._indicator?.setWord(word);
         // A newly arrived word carries no dot: it has not been missed yet.

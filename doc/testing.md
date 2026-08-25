@@ -70,6 +70,8 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] disabling the extension removes the indicator, the timer and the keybinding
 - [ ] a word with several senses shows a `1/4` stepper; stepping changes the definition
 - [ ] the chosen sense survives a rotation away and back
+- [ ] the reset arrow appears only after stepping, and returns to the opening sense
+- [ ] closing and reopening the card makes the current sense the new reset point
 - [ ] a word with one sense shows no stepper at all
 - [ ] the speaker plays a real recording, and still says something without one
 - [ ] the dot appears only after a whole interval passes unnoticed, and clears on opening

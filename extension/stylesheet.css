@@ -80,6 +80,19 @@
     opacity: 0.6;
 }
 
+/* Present only while the sense differs from the one the card opened with. */
+.wordbar-sense-reset {
+    padding: 1px 4px;
+    border-radius: 4px;
+    opacity: 0.7;
+}
+
+.wordbar-sense-reset:hover,
+.wordbar-sense-reset:focus {
+    opacity: 1;
+    background-color: rgba(127, 127, 127, 0.3);
+}
+
 .wordbar-definition {
     padding-bottom: 2px;
 }

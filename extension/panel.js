@@ -39,6 +39,7 @@ export const WordbarIndicator = GObject.registerClass({
         'incomplete-requested': {},
         'speak-requested': {param_types: [GObject.TYPE_INT64]},
         'sense-selected': {param_types: [GObject.TYPE_INT64]},
+        'sense-reset': {},
         'edit-requested': {param_types: [GObject.TYPE_INT64]},
         'popup-opened': {},
         'popup-closed': {},
@@ -99,6 +100,7 @@ export const WordbarIndicator = GObject.registerClass({
         this._card.connect('rated-know', () => this._emitForWord('rated-know'));
         this._card.connect('speak-requested', () => this._emitForWord('speak-requested'));
         this._card.connect('sense-selected', (_c, id) => this.emit('sense-selected', id));
+        this._card.connect('sense-reset', () => this.emit('sense-reset'));
         this._card.connect('edit-requested', () => this._emitForWord('edit-requested'));
 
         // No "Next word" item on purpose: all three ratings advance, and a real
@@ -189,9 +191,14 @@ export const WordbarIndicator = GObject.registerClass({
         this._renderLabel();
     }
 
-    /** Offer the current word's alternative senses in the card. */
-    setSenses(senses) {
-        this._card.setSenses(senses);
+    /**
+     * Offer the current word's alternative senses in the card.
+     *
+     * `baselineId` is the sense the card opened with; the reset button appears
+     * only once the selection has moved away from it.
+     */
+    setSenses(senses, baselineId = null) {
+        this._card.setSenses(senses, baselineId);
     }
 
     /** Show how many words still need a definition, or hide the row. */

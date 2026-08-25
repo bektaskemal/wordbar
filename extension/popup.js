@@ -21,6 +21,7 @@ export const WordCard = GObject.registerClass({
         'rated-know': {},
         'speak-requested': {},
         'sense-selected': {param_types: [GObject.TYPE_INT64]},
+        'sense-reset': {},
         'edit-requested': {},
     },
 }, class WordCard extends St.BoxLayout {
@@ -82,6 +83,18 @@ export const WordCard = GObject.registerClass({
         this._nextSense.connect('clicked', () => this._stepSense(1));
         senseRow.add_child(this._nextSense);
 
+        // Only appears once you have moved away from the sense the card
+        // opened with, so there is always something to go back to.
+        this._resetSense = new St.Button({
+            style_class: 'wordbar-sense-reset',
+            child: new St.Icon({icon_name: 'edit-undo-symbolic', icon_size: 13}),
+            can_focus: true,
+            visible: false,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._resetSense.connect('clicked', () => this.emit('sense-reset'));
+        senseRow.add_child(this._resetSense);
+
         this.add_child(senseRow);
         this._senseRow = senseRow;
         this._senses = [];
@@ -124,16 +137,23 @@ export const WordCard = GObject.registerClass({
      * Hidden entirely for a single sense, which is the common case; the
      * switcher must not become permanent furniture.
      */
-    setSenses(senses) {
+    setSenses(senses, baselineId = null) {
         this._senses = senses ?? [];
         const many = this._senses.length > 1;
         for (const actor of [this._prevSense, this._nextSense, this._senseCount])
             actor.visible = many;
-        if (!many)
+
+        if (!many) {
+            this._resetSense.visible = false;
             return;
+        }
 
         const index = this._senses.findIndex(s => s.selected);
         this._senseCount.text = `${index < 0 ? 1 : index + 1}/${this._senses.length}`;
+
+        const selected = this._senses[index]?.id ?? null;
+        this._resetSense.visible =
+            baselineId !== null && selected !== null && selected !== baselineId;
     }
 
     _stepSense(delta) {
