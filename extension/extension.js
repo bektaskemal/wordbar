@@ -180,9 +180,12 @@ export default class WordbarExtension extends Extension {
         }
 
         // Hold an unseen word rather than skipping past it, but only so long:
-        // otherwise ignoring the panel would freeze it on one word.
+        // otherwise ignoring the panel would freeze it on one word. The dot
+        // appears here rather than when the word arrives, so it means "a
+        // rotation passed you by" instead of merely "this word is new".
         if (!this._seen && this._holds < MAX_HOLDS) {
             this._holds += 1;
+            this._indicator?.setWaiting(true);
             return;
         }
 
@@ -193,7 +196,7 @@ export default class WordbarExtension extends Extension {
     _markSeen() {
         this._seen = true;
         this._holds = 0;
-        this._indicator?.setUnseen(false);
+        this._indicator?.setWaiting(false);
     }
 
     /**
@@ -210,7 +213,8 @@ export default class WordbarExtension extends Extension {
             this._holds = 0;
         }
         this._indicator?.setWord(word);
-        this._indicator?.setUnseen(word !== null && word !== undefined && !this._seen);
+        // A newly arrived word carries no dot: it has not been missed yet.
+        this._indicator?.setWaiting(this._holds > 0 && !this._seen);
     }
 
     // -- backend calls ----------------------------------------------------

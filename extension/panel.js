@@ -16,8 +16,8 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 import {WordCard} from './popup.js';
 import {ellipsize} from './terms.js';
 
-/** Marks a word you have not opened yet. */
-const UNSEEN_MARK = ' \u2022';
+/** Marks a word that has waited a whole interval without being looked at. */
+const WAITING_MARK = ' \u2022';
 
 /**
  * Shown when the vocabulary is empty: a name to click, not a cryptic mark.
@@ -49,7 +49,7 @@ export const WordbarIndicator = GObject.registerClass({
         this._maxChars = maxChars;
         this._word = null;
         this._available = true;
-        this._unseen = false;
+        this._waiting = false;
 
         const box = new St.BoxLayout({style_class: 'wordbar-panel-box'});
         this._warning = new St.Icon({
@@ -175,14 +175,15 @@ export const WordbarIndicator = GObject.registerClass({
     }
 
     /**
-     * Whether the current word is still waiting to be looked at.
+     * Whether this word has waited a full rotation interval unnoticed.
      *
-     * Deliberately not the FSRS due date: the selector already prefers due
-     * words, so a due marker would be lit almost always and carry no
-     * information. "You have not seen this one yet" is a signal that clears.
+     * Not "unseen since it appeared", which would mark every freshly rotated
+     * word and so be lit most of the time, and not the FSRS due date, which
+     * the selector already prefers and so would be lit almost always. This
+     * lights only when a rotation actually passed you by.
      */
-    setUnseen(unseen) {
-        this._unseen = unseen;
+    setWaiting(waiting) {
+        this._waiting = waiting;
         this._renderLabel();
     }
 
@@ -209,6 +210,6 @@ export const WordbarIndicator = GObject.registerClass({
         }
 
         const term = ellipsize(this._word.term, this._maxChars);
-        this._label.text = this._unseen ? `${term}${UNSEEN_MARK}` : term;
+        this._label.text = this._waiting ? `${term}${WAITING_MARK}` : term;
     }
 });

@@ -25,12 +25,15 @@ instead of being rotated past. After two held intervals the panel gives up and
 moves on, so ignoring Wordbar can never freeze it on one word. At the default
 interval a word you ignore occupies the panel for at most three intervals.
 
-**The dot means "you have not looked at this one yet"**, and clears when its
-popup opens. It was first implemented as the FSRS due date, which turned out to
-carry no information: the selector already prefers due words, so a due marker
-is lit almost always. Unseen-since-it-appeared is a signal that actually turns
-off, and it answers a question the reader has -- did I miss one? -- rather than
-one the scheduler already handles.
+**The dot means "a rotation passed you by"**: it appears once a word has waited
+a full interval unnoticed, and clears when its popup opens. Two earlier
+definitions were worse. The FSRS due date carried no information, because the
+selector already prefers due words, so it was lit almost always -- and lit
+permanently in a fresh dev database where every card is due. Marking a word
+unseen from the moment it arrived was better but still lit most of the time,
+since most words are never clicked. Waiting for a missed interval means the dot
+is off while a word is fresh and only lights when the reader actually missed
+something, which is the question they have: did I miss one?
 
 **Display is never a review.** Only an explicit Again or Know touches FSRS.
 
