@@ -428,11 +428,15 @@ impl Storage for SqliteStore {
     }
 }
 
+/// SQL for the stored-status part of a filter.
+///
+/// Learning and Known are views over the schedule, not stored states, so they
+/// arrive here already reduced by `WordFilter::status_scope`.
 fn status_clause(filter: WordFilter) -> &'static str {
-    match filter {
+    match filter.status_scope() {
         WordFilter::Active => "WHERE status = 'active'",
         WordFilter::Learned => "WHERE status = 'learned'",
-        WordFilter::All => "",
+        _ => "",
     }
 }
 

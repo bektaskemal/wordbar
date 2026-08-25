@@ -92,10 +92,10 @@ enum Command {
     List {
         /// Substring to match against term, definition and example.
         query: Option<String>,
-        /// Show archived words instead of active ones.
-        #[arg(long, conflicts_with = "all")]
-        learned: bool,
-        /// Show both active and archived words.
+        /// Show words you already know instead of those still being learned.
+        #[arg(long, visible_alias = "learned", conflicts_with = "all")]
+        known: bool,
+        /// Show every word, learning and known alike.
         #[arg(long)]
         all: bool,
         /// Emit JSON.
@@ -123,8 +123,8 @@ enum Command {
         /// json or csv.
         #[arg(long, default_value = "json")]
         format: String,
-        #[arg(long, conflicts_with = "all")]
-        learned: bool,
+        #[arg(long, visible_alias = "learned", conflicts_with = "all")]
+        known: bool,
         #[arg(long)]
         all: bool,
     },
@@ -320,11 +320,11 @@ async fn run(cli: Cli) -> zbus::Result<i32> {
 
         Command::List {
             query,
-            learned,
+            known,
             all,
             json,
         } => {
-            let filter = filter_name(learned, all);
+            let filter = filter_name(known, all);
             let dicts = wordbar
                 .list_words(filter, query.as_deref().unwrap_or(""))
                 .await?;
@@ -399,13 +399,9 @@ async fn run(cli: Cli) -> zbus::Result<i32> {
             }
         }
 
-        Command::Export {
-            format,
-            learned,
-            all,
-        } => {
+        Command::Export { format, known, all } => {
             let data = wordbar
-                .export_vocabulary(filter_name(learned, all), &format)
+                .export_vocabulary(filter_name(known, all), &format)
                 .await?;
             print!("{data}");
         }
@@ -437,11 +433,12 @@ async fn run(cli: Cli) -> zbus::Result<i32> {
     Ok(exit::OK)
 }
 
-fn filter_name(learned: bool, all: bool) -> &'static str {
-    match (learned, all) {
+/// Learning and known are views over the schedule; see wordbar-core.
+fn filter_name(known: bool, all: bool) -> &'static str {
+    match (known, all) {
         (_, true) => "all",
-        (true, _) => "learned",
-        _ => "active",
+        (true, _) => "known",
+        _ => "learning",
     }
 }
 

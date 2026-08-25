@@ -66,10 +66,17 @@ pub struct NewSense {
 /// Which slice of the vocabulary to list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WordFilter {
+    /// In rotation: not archived by hand.
     #[default]
     Active,
+    /// Archived by hand.
     Learned,
     All,
+    /// In rotation and not yet known well: the working set.
+    Learning,
+    /// Known: archived by hand, or an interval past
+    /// [`crate::model::KNOWN_INTERVAL_DAYS`].
+    Known,
 }
 
 impl WordFilter {
@@ -77,6 +84,8 @@ impl WordFilter {
         match s {
             "active" => Some(Self::Active),
             "learned" => Some(Self::Learned),
+            "learning" => Some(Self::Learning),
+            "known" => Some(Self::Known),
             "all" | "" => Some(Self::All),
             _ => None,
         }
@@ -86,8 +95,24 @@ impl WordFilter {
         match self {
             Self::Active => "active",
             Self::Learned => "learned",
+            Self::Learning => "learning",
+            Self::Known => "known",
             Self::All => "all",
         }
+    }
+
+    /// The stored-status filter this maps onto; the schedule decides the rest.
+    pub fn status_scope(self) -> Self {
+        match self {
+            Self::Learning => Self::Active,
+            Self::Known => Self::All,
+            other => other,
+        }
+    }
+
+    /// True when the filter has to consult the schedule, not just the status.
+    pub fn needs_schedule(self) -> bool {
+        matches!(self, Self::Learning | Self::Known)
     }
 }
 

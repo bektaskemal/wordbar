@@ -104,8 +104,8 @@ run_suite() {
 
     echo "learned and restore"
     check_contains "learned confirms" "as learned" "$($CTL learned ephemeral)"
-    check_contains "the word is listed as learned" "ephemeral" "$($CTL list --learned)"
-    check "it no longer appears in the active list" "0" \
+    check_contains "a learned word is listed as known" "ephemeral" "$($CTL list --known)"
+    check "it no longer appears among words being learned" "0" \
         "$($CTL list | grep -c '^ephemeral' || true)"
     check_contains "restore confirms" "Restored" "$($CTL restore ephemeral)"
     check_contains "it is active again" "ephemeral" "$($CTL list)"

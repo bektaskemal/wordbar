@@ -85,6 +85,13 @@ pub struct ReviewCard {
     pub last_review: DateTime<Utc>,
 }
 
+/// How long a review interval has to grow before a word counts as known.
+///
+/// Two months is long enough that recalling it again is real evidence rather
+/// than short-term memory, and short enough to be reached in a few months of
+/// ordinary use.
+pub const KNOWN_INTERVAL_DAYS: i64 = 60;
+
 impl ReviewCard {
     /// A brand-new card, due immediately.
     pub fn new(word_id: WordId, now: DateTime<Utc>) -> Self {
@@ -109,6 +116,21 @@ impl ReviewCard {
 
     pub fn is_due(&self, now: DateTime<Utc>) -> bool {
         self.due <= now
+    }
+
+    /// The current review interval in days.
+    pub fn interval_days(&self) -> i64 {
+        (self.due - self.last_review).num_days().max(0)
+    }
+
+    /// Whether FSRS considers this word known.
+    ///
+    /// Derived rather than stored: it is simply what the schedule already
+    /// says, so it needs no bookkeeping and cannot fall out of step with the
+    /// scheduler. A known word still rotates, just rarely -- knowing a word is
+    /// not a reason to stop testing it.
+    pub fn is_known(&self) -> bool {
+        !self.is_new() && self.interval_days() >= KNOWN_INTERVAL_DAYS
     }
 }
 

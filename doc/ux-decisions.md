@@ -19,6 +19,18 @@ costs more than the scheduling accuracy is worth.
 **Learned is not a popup button.** Archiving is housekeeping, done while
 reviewing the list, not mid-glance. It lives in the manager only.
 
+**Learning and Known are views over the schedule, not stored states.** A word
+crosses into Known once its review interval passes two months, which is long
+enough that recalling it again is real evidence rather than short-term memory.
+Deriving it means no bookkeeping and no way for the split to fall out of step
+with the scheduler -- marking words by hand is the kind of chore that never
+gets done, so the list would have lied.
+
+**A known word stays in the rotation.** Knowing a word is not a reason to stop
+testing it; FSRS simply shows it rarely, which is the whole point of a growing
+interval. Only an explicit archive takes a word out, and an archived word
+counts as known too.
+
 **Rating closes the popup and advances.** The next word belongs in the top bar
 as a prompt; showing its card would spend the recall test before it is asked.
 This was first built as "stay open", chosen only because a bug made the

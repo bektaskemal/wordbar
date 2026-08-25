@@ -210,11 +210,33 @@ impl Engine {
     }
 
     pub fn list_words(&self, filter: WordFilter, query: &str) -> Result<Vec<Word>> {
-        if query.trim().is_empty() {
-            self.store.list_words(filter)
+        let scope = filter.status_scope();
+        let mut words = if query.trim().is_empty() {
+            self.store.list_words(scope)?
         } else {
-            self.store.search_words(query, filter)
+            self.store.search_words(query, scope)?
+        };
+
+        // Learning and Known are views over the schedule rather than stored
+        // states, so they are resolved here where the cards are to hand.
+        if filter.needs_schedule() {
+            let known = |word: &Word| -> bool {
+                word.status == WordStatus::Learned
+                    || self
+                        .store
+                        .get_card(word.id)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|card| card.is_known())
+            };
+            match filter {
+                WordFilter::Known => words.retain(known),
+                WordFilter::Learning => words.retain(|w| !known(w)),
+                _ => {}
+            }
         }
+
+        Ok(words)
     }
 
     /// Active words with no definition yet, either because enrichment failed
@@ -230,8 +252,8 @@ impl Engine {
 
     pub fn stats(&self) -> Result<Stats> {
         Ok(Stats {
-            active: self.store.count_words(WordFilter::Active)?,
-            learned: self.store.count_words(WordFilter::Learned)?,
+            active: self.list_words(WordFilter::Learning, "")?.len(),
+            learned: self.list_words(WordFilter::Known, "")?.len(),
         })
     }
 

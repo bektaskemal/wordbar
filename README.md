@@ -94,7 +94,7 @@ wordbarctl learned                 # archive, then advance
 wordbarctl restore ephemeral
 wordbarctl refresh ephemeral       # look it up again
 wordbarctl refresh --all           # backfill senses after an upgrade
-wordbarctl list --learned
+wordbarctl list --known
 wordbarctl export --all > vocabulary.json
 wordbarctl import vocabulary.csv
 ```
@@ -103,6 +103,15 @@ Exit codes: `0` success, `1` error, `2` not found / nothing to show,
 `3` duplicate, `4` service unavailable.
 
 Waybar users: see [doc/waybar.md](doc/waybar.md).
+
+## Learning and known
+
+The vocabulary splits itself. A word counts as **known** once FSRS has pushed
+its review interval past two months, so the list reflects what you actually
+remember rather than what you got round to marking. Known words stay in the
+rotation -- rarely, as the schedule dictates -- because knowing a word is no
+reason to stop testing it. Marking a word learned by hand is the separate,
+stronger action: it takes the word out of rotation entirely.
 
 ## Definitions and pronunciation
 

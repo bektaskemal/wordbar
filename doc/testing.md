@@ -80,7 +80,10 @@ nested Shell cannot verify the global capture shortcut.
 ## 5. GTK manager — manual
 
 - [ ] the vocabulary list loads, searches and shows `N active · M learned`
-- [ ] switching to Learned shows archived words with a Restore action
+- [ ] the Learning/Known toggle splits the list by review interval
+- [ ] a word drilled until its interval is long appears under Known
+- [ ] a known word still appears in the panel occasionally
+- [ ] archiving by hand also files a word under Known, with a Restore action
 - [ ] editing a word updates it and the panel picks the change up
 - [ ] deleting asks first, then removes the word
 - [ ] a word captured from the Shell appears in the list without a manual reload

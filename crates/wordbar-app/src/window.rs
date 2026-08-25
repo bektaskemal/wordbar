@@ -165,11 +165,12 @@ impl Ui {
         let controls = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         controls.append(&self.search);
 
-        // Active / Learned, so "restore learned" has somewhere to happen.
+        // Learning / Known. The split is derived from the schedule, so words
+        // cross over on their own once their interval grows.
         let switcher = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         switcher.add_css_class("linked");
-        let active_button = gtk::ToggleButton::with_label("Active");
-        let learned_button = gtk::ToggleButton::with_label("Learned");
+        let active_button = gtk::ToggleButton::with_label("Learning");
+        let learned_button = gtk::ToggleButton::with_label("Known");
         learned_button.set_group(Some(&active_button));
         active_button.set_active(true);
         switcher.append(&active_button);
@@ -207,9 +208,9 @@ impl Ui {
 
     fn filter(&self) -> &'static str {
         if *self.showing_learned.borrow() {
-            "learned"
+            "known"
         } else {
-            "active"
+            "learning"
         }
     }
 
@@ -258,9 +259,10 @@ impl Ui {
                 self.empty.set_title("No matches");
                 self.empty.set_description(Some("Try a different search."));
             } else if *self.showing_learned.borrow() {
-                self.empty.set_title("Nothing learned yet");
-                self.empty
-                    .set_description(Some("Words you mark as learned appear here."));
+                self.empty.set_title("Nothing known yet");
+                self.empty.set_description(Some(
+                    "Words move here once you have recalled them often enough.",
+                ));
             } else {
                 self.empty.set_title("No words yet");
                 self.empty.set_description(Some(

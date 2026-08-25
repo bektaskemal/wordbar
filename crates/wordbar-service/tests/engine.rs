@@ -459,3 +459,97 @@ fn a_word_with_no_senses_still_works() {
     assert!(e.list_senses(id).unwrap().is_empty());
     assert!(e.get_word(id).unwrap().is_incomplete());
 }
+
+// -- learning vs known ----------------------------------------------------
+
+/// Rate a word Know until its interval passes the known threshold.
+fn drill_until_known(e: &mut Engine, id: i64) {
+    let mut now = t0();
+    for _ in 0..12 {
+        let card = e.rate(id, Rating::Know, now).unwrap().value;
+        if card.is_known() {
+            return;
+        }
+        now = card.due;
+    }
+    panic!("a word rated Know repeatedly should eventually count as known");
+}
+
+#[test]
+fn a_new_word_is_still_being_learned() {
+    let mut e = engine();
+    add(&mut e, "ephemeral");
+
+    assert_eq!(e.list_words(WordFilter::Learning, "").unwrap().len(), 1);
+    assert_eq!(e.list_words(WordFilter::Known, "").unwrap().len(), 0);
+}
+
+#[test]
+fn a_word_crosses_over_once_its_interval_grows() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    add(&mut e, "ubiquitous");
+
+    drill_until_known(&mut e, id);
+
+    let learning = e.list_words(WordFilter::Learning, "").unwrap();
+    let known = e.list_words(WordFilter::Known, "").unwrap();
+    assert_eq!(
+        learning.len(),
+        1,
+        "the undrilled word is still being learned"
+    );
+    assert_eq!(learning[0].term, "ubiquitous");
+    assert_eq!(known.len(), 1);
+    assert_eq!(known[0].term, "ephemeral");
+}
+
+#[test]
+fn a_known_word_stays_in_the_rotation() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    drill_until_known(&mut e, id);
+
+    // Knowing a word is not a reason to stop testing it; FSRS simply shows it
+    // rarely. Only a manual archive takes it out.
+    let card = e.get_card(id).unwrap().unwrap();
+    let candidates = e.list_words(WordFilter::Active, "").unwrap();
+    assert!(candidates.iter().any(|w| w.id == id));
+    assert!(card.is_known());
+}
+
+#[test]
+fn archiving_by_hand_also_counts_as_known() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    e.mark_learned(id, t0()).unwrap();
+
+    assert_eq!(e.list_words(WordFilter::Known, "").unwrap().len(), 1);
+    assert_eq!(e.list_words(WordFilter::Learning, "").unwrap().len(), 0);
+}
+
+#[test]
+fn the_counts_follow_the_same_split() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    add(&mut e, "ubiquitous");
+    drill_until_known(&mut e, id);
+
+    let stats = e.stats().unwrap();
+    assert_eq!(stats.active, 1, "still learning");
+    assert_eq!(stats.learned, 1, "known");
+}
+
+#[test]
+fn search_respects_the_split() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+    add(&mut e, "ephemera");
+    drill_until_known(&mut e, id);
+
+    assert_eq!(e.list_words(WordFilter::Known, "ephemer").unwrap().len(), 1);
+    assert_eq!(
+        e.list_words(WordFilter::Learning, "ephemer").unwrap().len(),
+        1
+    );
+}
