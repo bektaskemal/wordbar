@@ -85,6 +85,8 @@ export default class WordbarExtension extends Extension {
         indicator.connect('rated-know', (_i, id) => this._rate(id, 'rateKnow'));
         indicator.connect('add-requested', () => this._showAddDialog(''));
         indicator.connect('vocabulary-requested', () => this._openManager('openVocabulary'));
+        indicator.connect('preferences-requested', () => this._openManager('openPreferences'));
+        indicator.connect('quit-requested', () => this._quitService());
         indicator.connect('incomplete-requested', () => this._openManager('openIncomplete'));
         // "Add definition" opens that word's editor, not the whole list.
         indicator.connect('edit-requested', (_i, id) => this._editWord(id));
@@ -439,6 +441,23 @@ export default class WordbarExtension extends Extension {
         } catch (error) {
             showToast(_('Could not open the Wordbar manager.'));
             this._logFailure('opening the word editor', error);
+        }
+    }
+
+    /**
+     * Stop the background service.
+     *
+     * The panel drops to its unavailable state, honestly: nothing is running.
+     * Anything that touches Wordbar activates it again, so this frees memory
+     * rather than turning it off -- disabling the extension does that.
+     */
+    async _quitService() {
+        try {
+            await this._backend.quit();
+            this._indicator?.setAvailable(false);
+            showToast(_('Wordbar stopped'), null, 3);
+        } catch (error) {
+            this._logFailure('stopping the service', error);
         }
     }
 

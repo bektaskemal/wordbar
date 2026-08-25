@@ -38,6 +38,8 @@ pub struct Ui {
     stack: RefCell<Option<adw::ViewStack>>,
     /// Restrict the list to words that still need a definition.
     incomplete_only: RefCell<bool>,
+    /// Says so when that filter is on, and offers a way out of it.
+    banner: adw::Banner,
 }
 
 pub fn build(
@@ -130,6 +132,11 @@ impl Ui {
             words: RefCell::new(Vec::new()),
             stack: RefCell::new(None),
             incomplete_only: RefCell::new(false),
+            banner: adw::Banner::builder()
+                .title("Showing words that need a definition")
+                .button_label("Show all")
+                .revealed(false)
+                .build(),
         }
     }
 
@@ -160,6 +167,10 @@ impl Ui {
         add_button.set_tooltip_text(Some("Add a word"));
         controls.append(&add_button);
         page.append(&controls);
+        page.append(&self.banner);
+
+        self.banner
+            .connect_button_clicked(clone!(@weak self as ui => move |_| ui.show_all_words()));
 
         let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
         content.append(&self.list);
@@ -226,7 +237,11 @@ impl Ui {
         if words.is_empty() {
             self.scroller.set_visible(false);
             self.empty.set_visible(true);
-            if searching {
+            if *self.incomplete_only.borrow() {
+                self.empty.set_title("Nothing needs a definition");
+                self.empty
+                    .set_description(Some("Every word has one. Choose Show all to see them."));
+            } else if searching {
                 self.empty.set_title("No matches");
                 self.empty.set_description(Some("Try a different search."));
             } else if *self.showing_learned.borrow() {
@@ -340,10 +355,24 @@ impl Ui {
     /// Show only words with no definition, as the popup's hint asks for.
     pub fn show_incomplete_only(self: &Rc<Self>) {
         *self.incomplete_only.borrow_mut() = true;
+        self.banner.set_revealed(true);
         if let Some(stack) = self.stack.borrow().as_ref() {
             stack.set_visible_child_name("vocabulary");
         }
         self.reload();
+    }
+
+    /// Leave the "needs a definition" view.
+    pub fn show_all_words(self: &Rc<Self>) {
+        self.clear_incomplete_filter();
+        self.reload();
+    }
+
+    fn clear_incomplete_filter(self: &Rc<Self>) {
+        if *self.incomplete_only.borrow() {
+            *self.incomplete_only.borrow_mut() = false;
+            self.banner.set_revealed(false);
+        }
     }
 
     /// Raise the window and switch pages, for a second launch that was

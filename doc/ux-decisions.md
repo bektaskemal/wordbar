@@ -48,9 +48,17 @@ panel. The Shell degrades; it never nags and never blocks.
 **A dot after the word when it is due.** Explicit and readable at a glance,
 unlike a brightness or weight difference.
 
-**Right-click opens the manager.** Accepted cost: undiscoverable, since nothing
-in GNOME advertises a right-click action on a panel item. Mitigated by a
-pointer in the empty-state popup, which is where a new user looks.
+**Right-click opens a context menu**: Vocabulary, Preferences, Quit. A second
+menu rather than entries in the card, because the card is the product and
+these are destinations, not part of reviewing a word. Accepted cost:
+undiscoverable, since nothing in GNOME advertises a right-click action on a
+panel item -- mitigated by a pointer in the empty-state popup, which is where a
+new user looks, and by the menu being the only place these are named.
+
+**Quit stops the service, not Wordbar.** It is D-Bus activated, so anything
+that touches it starts it again; Quit frees its memory and the panel says so by
+dropping to its unavailable state. Turning Wordbar off for good means disabling
+the extension, which is where GNOME expects that control to be.
 
 ## Capture
 
@@ -80,6 +88,12 @@ stuck, not repeat what changed.
 selection has moved, so there is always something to go back to, and it makes
 stepping through senses safe to explore: committing on every step would
 otherwise be a trap.
+
+**The "needs a definition" view announces itself.** Opening the manager from
+the popup's hint filters the list, and that filter shows a banner with a way
+out. It was first an invisible one-way switch: once every definition was
+filled in it silently filtered everything away, and the manager simply said
+there were no words.
 
 **Words with no definition are collected, not prompted for.** The popup footer
 carries a quiet count that opens the manager filtered to them, so they are

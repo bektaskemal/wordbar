@@ -9,6 +9,7 @@ import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -36,6 +37,8 @@ export const WordbarIndicator = GObject.registerClass({
         'rated-know': {param_types: [GObject.TYPE_INT64]},
         'add-requested': {},
         'vocabulary-requested': {},
+        'preferences-requested': {},
+        'quit-requested': {},
         'incomplete-requested': {},
         'speak-requested': {param_types: [GObject.TYPE_INT64]},
         'sense-selected': {param_types: [GObject.TYPE_INT64]},
@@ -69,12 +72,15 @@ export const WordbarIndicator = GObject.registerClass({
         this.add_child(box);
         this._renderLabel();
 
-        // Right-click opens the manager. Undiscoverable by nature, so the
-        // empty-state popup spells it out.
+        this._buildContextMenu();
+
+        // Right-click opens the context menu. Undiscoverable by nature, so the
+        // empty-state popup spells it out -- and the menu is the only place
+        // these destinations are named.
         this.connect('button-press-event', (_actor, event) => {
             if (event.get_button() === Clutter.BUTTON_SECONDARY) {
                 this.menu.close();
-                this.emit('vocabulary-requested');
+                this._contextMenu.toggle();
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
@@ -85,6 +91,34 @@ export const WordbarIndicator = GObject.registerClass({
         this.menu.connect('open-state-changed', (menu, isOpen) => {
             this.emit(isOpen ? 'popup-opened' : 'popup-closed');
         });
+    }
+
+    /**
+     * The right-click menu.
+     *
+     * A second menu rather than entries in the main popup: the card is the
+     * product, and these are destinations, not part of reviewing a word.
+     */
+    _buildContextMenu() {
+        this._contextMenu = new PopupMenu.PopupMenu(this, 0.5, St.Side.TOP);
+        this._contextMenu.actor.add_style_class_name('wordbar-context-menu');
+        Main.uiGroup.add_child(this._contextMenu.actor);
+        this._contextMenu.actor.hide();
+        Main.panel.menuManager.addMenu(this._contextMenu);
+
+        const add = (label, signal) => {
+            const item = new PopupMenu.PopupMenuItem(label);
+            item.connect('activate', () => {
+                this._contextMenu.close();
+                this.emit(signal);
+            });
+            this._contextMenu.addMenuItem(item);
+        };
+
+        add(_('Vocabulary…'), 'vocabulary-requested');
+        add(_('Preferences…'), 'preferences-requested');
+        this._contextMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        add(_('Quit Wordbar'), 'quit-requested');
     }
 
     _buildMenu() {
@@ -209,6 +243,16 @@ export const WordbarIndicator = GObject.registerClass({
                 ? _('1 word needs a definition')
                 : _('%d words need definitions').replace('%d', String(count));
         }
+    }
+
+    /** PanelMenu.Button only knows about its own menu; ours must go too. */
+    destroy() {
+        if (this._contextMenu) {
+            Main.panel.menuManager.removeMenu(this._contextMenu);
+            this._contextMenu.destroy();
+            this._contextMenu = null;
+        }
+        super.destroy();
     }
 
     _renderLabel() {

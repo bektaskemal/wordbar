@@ -69,6 +69,8 @@ pub struct WordbarService {
     engine: Arc<Mutex<Engine>>,
     dictionary: Arc<dyn DictionaryProvider>,
     connection: Connection,
+    /// Woken by `Quit`, so the service can be stopped from the panel.
+    shutdown: Arc<tokio::sync::Notify>,
 }
 
 impl WordbarService {
@@ -76,11 +78,13 @@ impl WordbarService {
         engine: Arc<Mutex<Engine>>,
         dictionary: Arc<dyn DictionaryProvider>,
         connection: Connection,
+        shutdown: Arc<tokio::sync::Notify>,
     ) -> Self {
         Self {
             engine,
             dictionary,
             connection,
+            shutdown,
         }
     }
 
@@ -472,6 +476,17 @@ impl WordbarService {
             (word.term.clone(), word.audio_url.clone())
         };
         crate::speech::speak(&term, audio_url.as_deref()).await?;
+        Ok(())
+    }
+
+    /// Stop the service.
+    ///
+    /// It is D-Bus activated, so the next call starts it again; this frees its
+    /// memory rather than turning Wordbar off for good. Disabling the
+    /// extension is what does that.
+    async fn quit(&self) -> Result<(), ServiceError> {
+        tracing::info!("quit requested");
+        self.shutdown.notify_one();
         Ok(())
     }
 

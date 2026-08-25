@@ -39,7 +39,14 @@ async fn main() -> Result<()> {
         .await
         .context("connecting to the session bus")?;
 
-    let service = WordbarService::new(engine, dictionary, connection.clone());
+    // Woken by the Quit method, which the panel's context menu offers.
+    let shutdown = Arc::new(tokio::sync::Notify::new());
+    let service = WordbarService::new(
+        engine,
+        dictionary,
+        connection.clone(),
+        Arc::clone(&shutdown),
+    );
     connection
         .object_server()
         .at(OBJECT_PATH, service)
@@ -59,6 +66,7 @@ async fn main() -> Result<()> {
     tokio::select! {
         _ = tokio::signal::ctrl_c() => tracing::info!("interrupted"),
         _ = sigterm.recv() => tracing::info!("terminated"),
+        _ = shutdown.notified() => tracing::info!("stopped on request"),
     }
     Ok(())
 }

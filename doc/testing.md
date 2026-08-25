@@ -90,3 +90,8 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] the editor's sense chooser fills the fields, and Save keeps the choice
 - [ ] changing the capture shortcut here rebinds it in the Shell immediately
 - [ ] the popup's "N words need definitions" hint opens the list filtered to them
+- [ ] that filter shows a banner, and "Show all" leaves it
+- [ ] searching or switching Active/Learned also leaves the filter
+- [ ] right-click offers Vocabulary, Preferences and Quit
+- [ ] Quit stops the service and the panel shows its warning icon
+- [ ] anything afterwards re-activates the service and the word returns

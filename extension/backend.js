@@ -64,7 +64,9 @@ const IFACE = `
     <method name="Speak">
       <arg name="id" type="x" direction="in"/>
     </method>
+    <method name="OpenPreferences"/>
     <method name="OpenIncomplete"/>
+    <method name="Quit"/>
     <method name="CountIncomplete">
       <arg type="u" direction="out"/>
     </method>
@@ -338,6 +340,15 @@ export const Backend = GObject.registerClass({
 
     async speak(id) {
         await this._call('Speak', id);
+    }
+
+    async openPreferences() {
+        await this._call('OpenPreferences');
+    }
+
+    /* Stop the service. It is D-Bus activated, so the next call restarts it. */
+    async quit() {
+        await this._call('Quit');
     }
 
     async openIncomplete() {
