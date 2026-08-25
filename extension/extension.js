@@ -19,12 +19,24 @@ import {dismissToast, showToast, showUndoToast} from './toast.js';
 
 const CAPTURE_SHORTCUT_KEY = 'capture-shortcut';
 
+/**
+ * How many rotation intervals a word may hold the panel while unseen.
+ *
+ * Holding means a rotation never skips past a word you never looked at; the
+ * cap means the panel can never sit on one word all day. At the default
+ * interval a word you ignore occupies the panel for at most three intervals.
+ */
+const MAX_HOLDS = 2;
+
 export default class WordbarExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this._pendingRotation = false;
         this._rotationSource = 0;
         this._settingsIds = [];
+        this._currentId = null;
+        this._seen = false;
+        this._holds = 0;
 
         this._backend = new Backend();
         this._indicator = new WordbarIndicator(this._settings.get_int('max-panel-chars'));
@@ -77,7 +89,11 @@ export default class WordbarExtension extends Extension {
         indicator.connect('edit-requested', (_i, id) => this._editWord(id));
         indicator.connect('speak-requested', (_i, id) => this._speak(id));
 
-        // Phase 12: never change the visible word while its popup is open.
+        // Opening the popup is what "seen" means: you have been given the
+        // chance to recall this word, so the panel may move on.
+        indicator.connect('popup-opened', () => this._markSeen());
+
+        // Never change the visible word while its popup is open.
         indicator.connect('popup-closed', () => {
             if (this._pendingRotation) {
                 this._pendingRotation = false;
@@ -88,7 +104,7 @@ export default class WordbarExtension extends Extension {
 
     _connectBackend() {
         this._backend.connect('current-word-changed', (_b, word) => {
-            this._indicator?.setWord(word.term ? word : null);
+            this._showWord(word.term ? word : null);
         });
 
         // Enrichment landed: refresh the card if it is the word on screen.
@@ -162,7 +178,39 @@ export default class WordbarExtension extends Extension {
             this._pendingRotation = true;
             return;
         }
+
+        // Hold an unseen word rather than skipping past it, but only so long:
+        // otherwise ignoring the panel would freeze it on one word.
+        if (!this._seen && this._holds < MAX_HOLDS) {
+            this._holds += 1;
+            return;
+        }
+
         this._advance();
+    }
+
+    /** Record that the current word has been looked at, and clear its dot. */
+    _markSeen() {
+        this._seen = true;
+        this._holds = 0;
+        this._indicator?.setUnseen(false);
+    }
+
+    /**
+     * Put a word on screen, resetting the seen state when it is a new one.
+     *
+     * Every path that changes the panel word goes through here so the dot and
+     * the hold counter cannot drift out of step with what is displayed.
+     */
+    _showWord(word) {
+        const id = word?.id ?? null;
+        if (id !== this._currentId) {
+            this._currentId = id;
+            this._seen = false;
+            this._holds = 0;
+        }
+        this._indicator?.setWord(word);
+        this._indicator?.setUnseen(word !== null && word !== undefined && !this._seen);
     }
 
     // -- backend calls ----------------------------------------------------
@@ -170,7 +218,7 @@ export default class WordbarExtension extends Extension {
     async _refresh() {
         try {
             const word = await this._backend.getCurrentWord();
-            this._indicator?.setWord(word);
+            this._showWord(word);
         } catch (error) {
             this._logFailure('reading the current word', error);
         }
@@ -199,8 +247,10 @@ export default class WordbarExtension extends Extension {
     async _refreshDetails(id) {
         try {
             const word = await this._backend.getWordDetails(id);
-            if (word && this._indicator?.currentWord?.id === id)
+            if (word && this._indicator?.currentWord?.id === id) {
+                // Same word, enriched: keep the seen state, only refresh content.
                 this._indicator.setWord(word);
+            }
         } catch (error) {
             this._logFailure('refreshing word details', error);
         }
@@ -209,7 +259,7 @@ export default class WordbarExtension extends Extension {
     async _advance() {
         try {
             const word = await this._backend.advanceDisplay();
-            this._indicator?.setWord(word);
+            this._showWord(word);
         } catch (error) {
             this._logFailure('advancing the display', error);
         }
@@ -230,7 +280,7 @@ export default class WordbarExtension extends Extension {
         this._indicator?.menu.close();
         try {
             const next = await this._backend[method](id);
-            this._indicator?.setWord(next);
+            this._showWord(next);
         } catch (error) {
             this._logFailure('recording the rating', error);
         }

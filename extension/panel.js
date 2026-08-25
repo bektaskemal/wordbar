@@ -16,8 +16,8 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 import {WordCard} from './popup.js';
 import {ellipsize} from './terms.js';
 
-/** Marks a word that is due for review. */
-const DUE_MARK = ' \u2022';
+/** Marks a word you have not opened yet. */
+const UNSEEN_MARK = ' \u2022';
 
 /**
  * Shown when the vocabulary is empty: a name to click, not a cryptic mark.
@@ -49,6 +49,7 @@ export const WordbarIndicator = GObject.registerClass({
         this._maxChars = maxChars;
         this._word = null;
         this._available = true;
+        this._unseen = false;
 
         const box = new St.BoxLayout({style_class: 'wordbar-panel-box'});
         this._warning = new St.Icon({
@@ -173,6 +174,18 @@ export const WordbarIndicator = GObject.registerClass({
         this._renderLabel();
     }
 
+    /**
+     * Whether the current word is still waiting to be looked at.
+     *
+     * Deliberately not the FSRS due date: the selector already prefers due
+     * words, so a due marker would be lit almost always and carry no
+     * information. "You have not seen this one yet" is a signal that clears.
+     */
+    setUnseen(unseen) {
+        this._unseen = unseen;
+        this._renderLabel();
+    }
+
     /** Show how many words still need a definition, or hide the row. */
     setIncompleteCount(count) {
         this._incomplete.visible = count > 0;
@@ -196,8 +209,6 @@ export const WordbarIndicator = GObject.registerClass({
         }
 
         const term = ellipsize(this._word.term, this._maxChars);
-        // A dot marks a word that is due, so the panel says whether it wants
-        // attention without inviting you to read the definition.
-        this._label.text = this._word.is_due ? `${term}${DUE_MARK}` : term;
+        this._label.text = this._unseen ? `${term}${UNSEEN_MARK}` : term;
     }
 });

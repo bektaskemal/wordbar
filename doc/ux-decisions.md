@@ -19,8 +19,18 @@ This was first built as "stay open", chosen only because a bug made the
 advance invisible -- rating reverted to the word just rated. With that fixed,
 closing is what the learning model wants.
 
-**Rotation every 15 minutes**, options 5/10/15/30/60. Roughly thirty glances in
-a working day.
+**Rotation every 15 minutes**, options 5/10/15/30/60, but the timer paces the
+reader rather than itself: a word that has not been looked at holds the panel
+instead of being rotated past. After two held intervals the panel gives up and
+moves on, so ignoring Wordbar can never freeze it on one word. At the default
+interval a word you ignore occupies the panel for at most three intervals.
+
+**The dot means "you have not looked at this one yet"**, and clears when its
+popup opens. It was first implemented as the FSRS due date, which turned out to
+carry no information: the selector already prefers due words, so a due marker
+is lit almost always. Unseen-since-it-appeared is a signal that actually turns
+off, and it answers a question the reader has -- did I miss one? -- rather than
+one the scheduler already handles.
 
 **Display is never a review.** Only an explicit Again or Know touches FSRS.
 
