@@ -115,6 +115,8 @@ export const WordbarIndicator = GObject.registerClass({
             this._contextMenu.addMenuItem(item);
         };
 
+        add(_('Add word…'), 'add-requested');
+        this._contextMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         add(_('Vocabulary…'), 'vocabulary-requested');
         add(_('Preferences…'), 'preferences-requested');
         this._contextMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -159,23 +161,9 @@ export const WordbarIndicator = GObject.registerClass({
         });
         this.menu.box.add_child(this._incomplete);
 
-        const footerBox = new St.BoxLayout({
-            style_class: 'wordbar-footer',
-            x_expand: true,
-        });
-        const addButton = new St.Button({
-            style_class: 'wordbar-footer-button',
-            label: _('+ Add word'),
-            x_expand: true,
-            x_align: Clutter.ActorAlign.START,
-            can_focus: true,
-        });
-        addButton.connect('clicked', () => {
-            this.menu.close();
-            this.emit('add-requested');
-        });
-        footerBox.add_child(addButton);
-        this.menu.box.add_child(footerBox);
+        // No "+ Add word" here: adding is a destination, not part of
+        // reviewing the word on screen, so it lives in the right-click menu
+        // beside the other destinations.
     }
 
     _emitForWord(signal) {

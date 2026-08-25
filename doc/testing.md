@@ -88,10 +88,14 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] export writes JSON or CSV depending on the chosen filename
 - [ ] with the service unreachable, the window shows an error toast rather than hanging
 - [ ] the editor's sense chooser fills the fields, and Save keeps the choice
+- [ ] "Choose sense…" on a row switches the sense in one step
+- [ ] "Choose sense…" on a word with one sense says so rather than opening an empty dialog
+- [ ] import and export are reachable from the window menu
 - [ ] changing the capture shortcut here rebinds it in the Shell immediately
 - [ ] the popup's "N words need definitions" hint opens the list filtered to them
 - [ ] that filter shows a banner, and "Show all" leaves it
 - [ ] searching or switching Active/Learned also leaves the filter
-- [ ] right-click offers Vocabulary, Preferences and Quit
+- [ ] right-click offers Add word, Vocabulary, Preferences and Quit
+- [ ] with no words the popup shows no rating buttons at all
 - [ ] Quit stops the service and the panel shows its warning icon
 - [ ] anything afterwards re-activates the service and the word returns

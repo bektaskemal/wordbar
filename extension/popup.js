@@ -121,12 +121,12 @@ export const WordCard = GObject.registerClass({
         // Two ratings only. Archiving is housekeeping and lives in the
         // manager; a Learned button here invites premature archiving of words
         // that are still being learned.
-        const actions = new St.BoxLayout({style_class: 'wordbar-actions', x_expand: true});
+        this._actions = new St.BoxLayout({style_class: 'wordbar-actions', x_expand: true});
         this._again = this._actionButton(_('Again'), 'wordbar-action-again', 'rated-again');
         this._know = this._actionButton(_('Know'), 'wordbar-action-know', 'rated-know');
         for (const button of [this._again, this._know])
-            actions.add_child(button);
-        this.add_child(actions);
+            this._actions.add_child(button);
+        this.add_child(this._actions);
 
         this._word = null;
     }
@@ -189,18 +189,21 @@ export const WordCard = GObject.registerClass({
             this.setSenses([]);
             this._definition.text = _(
                 'Select a word anywhere and press Super+Shift+V to add it.\n' +
-                'Right-click this indicator to open Wordbar.'
+                'Right-click this indicator for the vocabulary and settings.'
             );
             this._definition.visible = true;
             this._example.visible = false;
             this._addDefinition.visible = false;
             this._speaker.visible = false;
-            this._setActionsEnabled(false);
+            // Hidden, not greyed out: there is nothing to rate, and a dimmed
+            // pair of buttons still reads as something you failed to use.
+            this._actions.visible = false;
             return;
         }
 
+        this._actions.visible = true;
+
         this._term.text = word.term;
-        this._setActionsEnabled(true);
 
         const partOfSpeech = word.part_of_speech || '';
         this._partOfSpeech.text = partOfSpeech;
@@ -222,13 +225,5 @@ export const WordCard = GObject.registerClass({
         // Offered whenever we can say something: a recording, or a
         // phonetic spelling worth synthesising.
         this._speaker.visible = Boolean(word.has_audio) || Boolean(word.phonetic);
-    }
-
-    _setActionsEnabled(enabled) {
-        for (const button of [this._again, this._know]) {
-            button.reactive = enabled;
-            button.can_focus = enabled;
-            button.opacity = enabled ? 255 : 128;
-        }
     }
 });

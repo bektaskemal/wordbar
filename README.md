@@ -120,8 +120,9 @@ Words captured before senses existed have none until you run
 
 ## Settings
 
-All of them live in the manager app -- panel, rotation interval, capture
-shortcut, import and export -- so there is one place to look. It writes the
+Rotation interval and capture shortcut live in the manager app, and import and
+export sit with the vocabulary in the window's menu, so there is one place to
+look. It writes the
 extension's GSettings, so the panel applies changes immediately. The
 extension's own preferences page just points at it.
 

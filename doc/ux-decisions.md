@@ -6,6 +6,9 @@ several early choices were made while a bug made the alternative look broken.
 
 ## The review loop
 
+**An empty vocabulary shows no rating buttons.** There is nothing to rate, and
+a greyed-out pair still reads as something you failed to use.
+
 **Two ratings: Again and Know.** Not the full FSRS four. A glanceable panel is
 not a flashcard app, and a judgement call between Hard and Good on every word
 costs more than the scheduling accuracy is worth.
@@ -48,7 +51,8 @@ panel. The Shell degrades; it never nags and never blocks.
 **A dot after the word when it is due.** Explicit and readable at a glance,
 unlike a brightness or weight difference.
 
-**Right-click opens a context menu**: Vocabulary, Preferences, Quit. A second
+**Right-click opens a context menu**: Add word, Vocabulary, Preferences, Quit.
+Adding is a destination too, so it sits there rather than in the card. A second
 menu rather than entries in the card, because the card is the product and
 these are destinations, not part of reviewing a word. Accepted cost:
 undiscoverable, since nothing in GNOME advertises a right-click action on a
@@ -113,6 +117,20 @@ Shell, so the compositor never runs a subprocess.
 **All preferences live here**, the capture shortcut included. One window, so
 there is never a question of which one to open. It writes the extension's
 GSettings, so the panel still applies changes immediately.
+
+**No "show word in top bar" switch.** Turning it off left an extension that
+did nothing but host a keyboard shortcut -- the panel word is the product. Not
+wanting it means disabling the extension, which is where GNOME expects that
+control anyway.
+
+**Import and export sit with the vocabulary**, in the window's menu, not among
+the preferences: they act on the words, not on how the panel behaves. The note
+about scheduler internals went with them -- what an export omits is
+documented, not something to explain in the UI every time.
+
+**Choosing a sense is a row action**, not only a field in the editor. A wrong
+sense is common enough to deserve a one-step route rather than being buried in
+a form.
 
 **Row actions stay behind a per-row menu.** Compact, and it scales as actions
 are added.

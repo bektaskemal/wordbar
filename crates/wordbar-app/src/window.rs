@@ -82,6 +82,19 @@ pub fn build(
         .build();
     let header = adw::HeaderBar::builder().title_widget(&switcher).build();
 
+    // Import and export act on the vocabulary, so they belong with it rather
+    // than among the settings that change how the panel behaves.
+    let menu = gio::Menu::new();
+    menu.append(Some("Import vocabulary…"), Some("win.import"));
+    menu.append(Some("Export vocabulary…"), Some("win.export"));
+    header.pack_end(
+        &gtk::MenuButton::builder()
+            .icon_name("open-menu-symbolic")
+            .menu_model(&menu)
+            .tooltip_text("Main menu")
+            .build(),
+    );
+
     toasts.set_child(Some(&stack));
 
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -280,6 +293,7 @@ impl Ui {
         // not match -- so every row menu entry did nothing at all.
         let menu = gio::Menu::new();
         menu.append_item(&row_action("Edit…", "word.edit", word.id));
+        menu.append_item(&row_action("Choose sense…", "word.sense", word.id));
         if word.learned {
             menu.append_item(&row_action("Restore", "word.restore", word.id));
         } else {
@@ -312,6 +326,13 @@ impl Ui {
             }
         }));
         group.add_action(&edit);
+
+        let sense = gio::SimpleAction::new("sense", Some(glib::VariantTy::INT64));
+        sense.connect_activate(clone!(@weak self as ui => move |_, param| {
+            let Some(id) = param.and_then(|p| p.get::<i64>()) else { return };
+            ui.choose_sense(id);
+        }));
+        group.add_action(&sense);
 
         let learned = gio::SimpleAction::new("learned", Some(glib::VariantTy::INT64));
         learned.connect_activate(clone!(@weak self as ui => move |_, param| {
@@ -350,6 +371,19 @@ impl Ui {
         group.add_action(&delete);
 
         self.window.insert_action_group("word", Some(&group));
+
+        let window_actions = gio::SimpleActionGroup::new();
+
+        let import = gio::SimpleAction::new("import", None);
+        import.connect_activate(clone!(@weak self as ui => move |_, _| ui.import()));
+        window_actions.add_action(&import);
+
+        let export = gio::SimpleAction::new("export", None);
+        export.connect_activate(clone!(@weak self as ui => move |_, _| ui.export()));
+        window_actions.add_action(&export);
+
+        self.window
+            .insert_action_group("win", Some(&window_actions));
     }
 
     /// Show only words with no definition, as the popup's hint asks for.
@@ -427,6 +461,86 @@ impl Ui {
                 }
             });
         });
+    }
+
+    /// Pick which sense a word shows, straight from the list.
+    ///
+    /// The editor can do this too, but a wrong sense is common enough to
+    /// deserve its own one-step route rather than being buried in a form.
+    fn choose_sense(self: &Rc<Self>, id: i64) {
+        let ui = Rc::clone(self);
+        glib::spawn_future_local(async move {
+            let senses = match ui.client.senses(id).await {
+                Ok(senses) => senses,
+                Err(err) => return ui.error(&err),
+            };
+            if senses.len() < 2 {
+                ui.toast("No other senses were found for this word");
+                return;
+            }
+            ui.present_sense_chooser(&senses);
+        });
+    }
+
+    fn present_sense_chooser(self: &Rc<Self>, senses: &[crate::word::Sense]) {
+        let dialog = adw::MessageDialog::builder()
+            .transient_for(&self.window)
+            .modal(true)
+            .heading("Choose sense")
+            .body("The chosen sense is what the panel shows from now on.")
+            .build();
+
+        let list = gtk::ListBox::builder()
+            .selection_mode(gtk::SelectionMode::Single)
+            .build();
+        list.add_css_class("boxed-list");
+        for sense in senses {
+            let row = adw::ActionRow::builder()
+                .title(glib::markup_escape_text(&sense.summary))
+                .build();
+            row.set_title_lines(3);
+            list.append(&row);
+        }
+        if let Some(index) = senses.iter().position(|s| s.selected) {
+            if let Some(row) = list.row_at_index(index as i32) {
+                list.select_row(Some(&row));
+            }
+        }
+
+        let scroller = gtk::ScrolledWindow::builder()
+            .min_content_height(220)
+            .propagate_natural_height(true)
+            .child(&list)
+            .build();
+        dialog.set_extra_child(Some(&scroller));
+
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("use", "Use this sense");
+        dialog.set_response_appearance("use", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("use"));
+
+        let owned: Vec<crate::word::Sense> = senses.to_vec();
+        dialog.connect_response(
+            None,
+            clone!(@weak self as ui, @weak list => move |_, response| {
+                if response != "use" {
+                    return;
+                }
+                let Some(row) = list.selected_row() else { return };
+                let Some(sense) = owned.get(row.index() as usize) else { return };
+                let sense_id = sense.id;
+                glib::spawn_future_local(clone!(@weak ui => async move {
+                    match ui.client.select_sense(sense_id).await {
+                        Ok(word) => {
+                            ui.toast(&format!("Updated \u{201c}{}\u{201d}", word.term));
+                            ui.reload();
+                        }
+                        Err(err) => ui.error(&err),
+                    }
+                }));
+            }),
+        );
+        dialog.present();
     }
 
     fn restore_word(self: &Rc<Self>, id: i64) {
@@ -534,18 +648,11 @@ impl Ui {
             }
         }
 
-        page.add(&self.build_data_group());
         page.upcast()
     }
 
     fn build_panel_group(self: &Rc<Self>, settings: &gio::Settings) -> adw::PreferencesGroup {
         let group = adw::PreferencesGroup::builder().title("Panel").build();
-
-        let show = adw::SwitchRow::builder()
-            .title("Show word in top bar")
-            .build();
-        settings.bind("show-in-top-bar", &show, "active").build();
-        group.add(&show);
 
         let options = gtk::StringList::new(
             &ROTATION_OPTIONS
@@ -649,39 +756,6 @@ impl Ui {
         ));
         dialog.add_controller(controller);
         dialog.present();
-    }
-
-    fn build_data_group(self: &Rc<Self>) -> adw::PreferencesGroup {
-        let group = adw::PreferencesGroup::builder()
-            .title("Data")
-            .description("Export carries your words only — never scheduling internals.")
-            .build();
-
-        let import = adw::ActionRow::builder()
-            .title("Import vocabulary…")
-            .build();
-        let import_button = gtk::Button::builder()
-            .label("Import")
-            .valign(gtk::Align::Center)
-            .build();
-        import_button.connect_clicked(clone!(@weak self as ui => move |_| ui.import()));
-        import.add_suffix(&import_button);
-        import.set_activatable_widget(Some(&import_button));
-        group.add(&import);
-
-        let export = adw::ActionRow::builder()
-            .title("Export vocabulary…")
-            .build();
-        let export_button = gtk::Button::builder()
-            .label("Export")
-            .valign(gtk::Align::Center)
-            .build();
-        export_button.connect_clicked(clone!(@weak self as ui => move |_| ui.export()));
-        export.add_suffix(&export_button);
-        export.set_activatable_widget(Some(&export_button));
-        group.add(&export);
-
-        group
     }
 
     fn import(self: &Rc<Self>) {
@@ -878,7 +952,13 @@ mod tests {
     /// became a no-op. Keep the targets explicitly typed.
     #[test]
     fn row_action_targets_are_int64() {
-        for action in ["word.edit", "word.learned", "word.restore", "word.delete"] {
+        for action in [
+            "word.edit",
+            "word.sense",
+            "word.learned",
+            "word.restore",
+            "word.delete",
+        ] {
             let item = row_action("Label", action, 3);
             let target = item
                 .attribute_value("target", None)

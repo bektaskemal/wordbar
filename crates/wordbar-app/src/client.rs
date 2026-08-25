@@ -21,6 +21,7 @@ trait Wordbar {
     fn add_word(&self, text: &str) -> zbus::Result<WordDict>;
     fn get_word_details(&self, id: i64) -> zbus::Result<WordDict>;
     fn list_senses(&self, id: i64) -> zbus::Result<Vec<WordDict>>;
+    fn select_sense(&self, sense_id: i64) -> zbus::Result<WordDict>;
     fn update_word(&self, id: i64, fields: HashMap<&str, &str>) -> zbus::Result<WordDict>;
     fn mark_learned(&self, id: i64) -> zbus::Result<WordDict>;
     fn restore_word(&self, id: i64) -> zbus::Result<WordDict>;
@@ -60,6 +61,10 @@ enum Request {
     Senses {
         id: i64,
         reply: Sender<Result<Vec<Sense>, String>>,
+    },
+    SelectSense {
+        sense_id: i64,
+        reply: Sender<Result<Word, String>>,
     },
     Add {
         text: String,
@@ -168,6 +173,12 @@ impl Client {
         self.request(|reply| Request::Senses { id, reply }).await
     }
 
+    /// Show a different sense from now on.
+    pub async fn select_sense(&self, sense_id: i64) -> Result<Word, String> {
+        self.request(|reply| Request::SelectSense { sense_id, reply })
+            .await
+    }
+
     pub async fn add(&self, text: &str) -> Result<Word, String> {
         let text = text.to_string();
         self.request(|reply| Request::Add { text, reply }).await
@@ -274,6 +285,14 @@ async fn handle(proxy: &WordbarProxy<'_>, request: Request) {
                 .map_err(|e| describe(&e));
             let _ = reply.send(result).await;
         }
+        Request::SelectSense { sense_id, reply } => {
+            let result = proxy
+                .select_sense(sense_id)
+                .await
+                .map_err(|e| describe(&e))
+                .and_then(|d| Word::from_dict(&d).ok_or_else(|| "empty reply".to_string()));
+            let _ = reply.send(result).await;
+        }
         Request::Get { id, reply } => {
             let result = proxy
                 .get_word_details(id)
@@ -371,6 +390,7 @@ async fn drain_with_error(requests: Receiver<Request>, message: String) {
             Request::Stats { reply } => drop(reply.send(Err(message)).await),
             Request::Get { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Senses { reply, .. } => drop(reply.send(Err(message)).await),
+            Request::SelectSense { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Add { reply, .. } => drop(reply.send(Err(message)).await),
             Request::Update { reply, .. } => drop(reply.send(Err(message)).await),
             Request::MarkLearned { reply, .. } => drop(reply.send(Err(message)).await),

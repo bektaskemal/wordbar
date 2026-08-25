@@ -3,12 +3,6 @@
   <schema id="org.gnome.shell.extensions.wordbar"
           path="/org/gnome/shell/extensions/wordbar/">
 
-    <key name="show-in-top-bar" type="b">
-      <default>true</default>
-      <summary>Show word in top bar</summary>
-      <description>Whether the current word is displayed in the GNOME top bar.</description>
-    </key>
-
     <key name="rotation-minutes" type="i">
       <default>15</default>
       <range min="1" max="1440"/>

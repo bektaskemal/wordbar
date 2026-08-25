@@ -47,7 +47,6 @@ export default class WordbarExtension extends Extension {
         this._connectSettings();
 
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
-        this._applyVisibility();
         this._addKeybinding();
         this._startRotationTimer();
 
@@ -132,9 +131,6 @@ export default class WordbarExtension extends Extension {
         this._settingsIds.push(this._settings.connect('changed::rotation-minutes', () => {
             this._startRotationTimer();
         }));
-        this._settingsIds.push(this._settings.connect('changed::show-in-top-bar', () => {
-            this._applyVisibility();
-        }));
         this._settingsIds.push(this._settings.connect('changed::max-panel-chars', () => {
             this._indicator?.setMaxChars(this._settings.get_int('max-panel-chars'));
         }));
@@ -142,17 +138,6 @@ export default class WordbarExtension extends Extension {
             this._removeKeybinding();
             this._addKeybinding();
         }));
-    }
-
-    /**
-     * Hide both the button and its panel container, so a hidden Wordbar leaves
-     * no gap in the top bar. The indicator itself stays alive: destroying it
-     * belongs to disable().
-     */
-    _applyVisibility() {
-        const show = this._settings.get_boolean('show-in-top-bar');
-        this._indicator.visible = show;
-        this._indicator.container.visible = show;
     }
 
     // -- rotation ---------------------------------------------------------
