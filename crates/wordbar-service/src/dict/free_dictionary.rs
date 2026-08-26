@@ -46,7 +46,7 @@ impl FreeDictionary {
 #[async_trait]
 impl DictionaryProvider for FreeDictionary {
     async fn lookup(&self, term: &str) -> Result<Option<DictionaryEntry>> {
-        let url = format!("{}/{}", self.endpoint, urlencode(term));
+        let url = format!("{}/{}", self.endpoint, super::urlencode(term));
         let response = self
             .client
             .get(&url)
@@ -127,18 +127,6 @@ fn convert(entries: &[ApiEntry]) -> Option<DictionaryEntry> {
     };
 
     (!result.is_empty()).then_some(result)
-}
-
-fn urlencode(term: &str) -> String {
-    term.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (b as char).to_string()
-            }
-            b' ' => "%20".to_string(),
-            other => format!("%{other:02X}"),
-        })
-        .collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -246,11 +234,5 @@ mod tests {
             Some("adjective"),
             "the noun sense must not lead just because it was listed first"
         );
-    }
-
-    #[test]
-    fn terms_with_spaces_are_percent_encoded() {
-        assert_eq!(urlencode("ad hoc"), "ad%20hoc");
-        assert_eq!(urlencode("caf\u{e9}"), "caf%C3%A9");
     }
 }

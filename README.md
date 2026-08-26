@@ -134,18 +134,29 @@ only if you want your own.
 Duplicates are skipped, never overwritten, and a bad row can't abort the
 import; the CLI reports all three counts.
 
-## When a lookup fails
+## Where definitions come from
 
-Definitions come from [dictionaryapi.dev](https://dictionaryapi.dev), which
-needs no key and is occasionally down. A lookup that fails is not lost: every
-one goes through a single worker that keeps what it could not finish and tries
-again, backing off from 15 seconds to half an hour so an outage is retried
-twice an hour rather than hammered. Words still missing a definition are picked
-up again when the service starts, so an outage that outlasts a logout is
-covered too.
+Two sources, tried in order, neither needing a key or an account:
 
-A word the dictionary *answers* about but does not have -- a typo, a name, a
-phrase -- is not retried on a timer, since the answer would not change. Those
+1. [dictionaryapi.dev](https://dictionaryapi.dev) -- concise, learner-shaped
+   definitions, and the only one of the two that carries pronunciation
+   recordings.
+2. [Wiktionary](https://en.wiktionary.org) -- wordier and without audio, but run
+   by the Wikimedia Foundation and correspondingly hard to knock over. It also
+   covers phrases and rarer words the first one does not have.
+
+The first is the better read, so it leads; the second is the reason a word
+still gets a definition when the first is having a bad day. `refresh` re-asks
+the chain from the top, so a word that fell back can be upgraded later.
+
+A lookup that fails is not lost either: every one goes through a single worker
+that keeps what it could not finish and tries again, backing off from 15
+seconds to half an hour so an outage is retried twice an hour rather than
+hammered. Words still missing a definition are picked up again when the service
+starts, so an outage that outlasts a logout is covered too.
+
+A word every source *answers* about but none has -- a typo, a name -- is not
+retried on a timer, since the answer would not change. Those
 show up in the manager's incomplete list, and fixing the spelling queues a
 fresh lookup. To force one:
 

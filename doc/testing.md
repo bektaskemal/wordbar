@@ -12,6 +12,7 @@ Four layers, tested independently (Phase 27).
 | dictionary parsing | `crates/wordbar-service/src/dict/free_dictionary.rs` |
 | import/export | `crates/wordbar-service/src/exchange.rs` |
 | lookup retries | `crates/wordbar-service/src/enrich.rs`, `scripts/e2e-retry.sh` |
+| dictionary fallback | `crates/wordbar-service/src/dict/mod.rs`, `dict/wiktionary.rs` |
 
 ## 2. Storage and engine — `cargo test -p wordbar-service`
 

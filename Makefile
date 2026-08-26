@@ -70,6 +70,10 @@ install-binaries: build
 	@# and the bus starts the new one on the next call. Skipped for staged
 	@# packaging builds, which must not touch the live session.
 	@if [ -z "$(DESTDIR)" ] && pkill -x wordbar-service 2>/dev/null; then \
+		for _ in 1 2 3 4 5 6 7 8 9 10; do \
+			pgrep -x wordbar-service > /dev/null || break; \
+			sleep 0.2; \
+		done; \
 		echo "restarted wordbar-service"; \
 	fi
 

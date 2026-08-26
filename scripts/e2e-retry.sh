@@ -110,6 +110,9 @@ EOF
 
 export XDG_DATA_DIRS="$WORK:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export WORDBAR_DATA_DIR="$WORK/db"
+# Pin the primary provider: the real fallback would answer every one of these
+# lookups and there would be no failure left to retry.
+export WORDBAR_DICTIONARY=primary
 export WORDBAR_DICTIONARY_ENDPOINT="http://127.0.0.1:$PORT"
 export WORDBAR_LOG="${WORDBAR_LOG:-info}"
 
