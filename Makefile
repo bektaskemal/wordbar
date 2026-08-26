@@ -56,7 +56,7 @@ install: install-binaries install-dbus install-desktop install-extension
 	@echo
 	@echo "Installed. Next:"
 	@echo "  1. Ensure $(BINDIR) is on your PATH."
-	@echo "  2. Log out and back in (or restart GNOME Shell on X11)."
+	@echo "  2. Log out and back in (or restart GNOME Shell on X11) to reload the extension."
 	@echo "  3. gnome-extensions enable $(EXTENSION_UUID)"
 
 install-binaries: build
@@ -64,6 +64,13 @@ install-binaries: build
 	for binary in $(BINARIES); do \
 		install -m 0755 $(TARGETDIR)/$$binary $(DESTDIR)$(BINDIR)/$$binary; \
 	done
+	@# A running service keeps the old binary mapped, so an install alone
+	@# changes nothing until it restarts. SIGTERM is its clean shutdown path
+	@# and the bus starts the new one on the next call. Skipped for staged
+	@# packaging builds, which must not touch the live session.
+	@if [ -z "$(DESTDIR)" ] && pkill -x wordbar-service 2>/dev/null; then \
+		echo "restarted wordbar-service"; \
+	fi
 
 # The activation file is what makes the service start on demand. There is
 # deliberately no systemd unit and no autostart entry.
