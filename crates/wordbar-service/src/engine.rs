@@ -195,7 +195,10 @@ impl Engine {
             audio_url: entry.audio_url.clone().map(Some),
             ..WordPatch::default()
         };
-        if let Some(primary) = entry.primary() {
+        // A part of speech the word already carries is a hint from wherever it
+        // was captured, not a guess -- honour it when picking which sense to
+        // show.
+        if let Some(primary) = entry.preferred(existing.part_of_speech.as_deref()) {
             let keep_definition = mode == Enrichment::FillGaps && !existing.is_incomplete();
             if !keep_definition {
                 patch.definition = Some(Some(primary.definition.clone()));

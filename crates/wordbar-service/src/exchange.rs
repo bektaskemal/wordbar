@@ -138,14 +138,62 @@ fn parse_csv(data: &str) -> Vec<PortableWord> {
         if index == 0 && term.eq_ignore_ascii_case("term") {
             continue; // header
         }
+        // A bare list is very often `word pos` -- the shape a vocabulary
+        // notebook or a study app exports. Only split when there is no other
+        // column to disagree with, and only on a token that is unmistakably a
+        // part of speech, so a two-word term stays intact.
+        let (term, trailing_pos) = if fields.len() == 1 {
+            split_trailing_part_of_speech(term)
+        } else {
+            (term, None)
+        };
+
         out.push(PortableWord {
             term: term.to_string(),
             definition: field(&fields, 1),
             example: field(&fields, 2),
-            part_of_speech: field(&fields, 3),
+            part_of_speech: field(&fields, 3).or(trailing_pos),
         });
     }
     out
+}
+
+/// Split `haphazard adv` into `("haphazard", Some("adverb"))`.
+///
+/// Returns the line unchanged when the last token is not a part of speech, so
+/// `at large` survives and `at large phrase` does not lose its head.
+fn split_trailing_part_of_speech(term: &str) -> (&str, Option<String>) {
+    let Some((head, last)) = term.rsplit_once(char::is_whitespace) else {
+        return (term, None);
+    };
+    let head = head.trim_end();
+    if head.is_empty() {
+        return (term, None);
+    }
+    match expand_part_of_speech(last.trim().trim_end_matches('.')) {
+        Some(pos) => (head, Some(pos.to_string())),
+        None => (term, None),
+    }
+}
+
+/// Map a part-of-speech abbreviation to the name dictionaries use, so an
+/// imported tag can actually be matched against a looked-up sense.
+fn expand_part_of_speech(token: &str) -> Option<&'static str> {
+    let token = token.to_lowercase();
+    Some(match token.as_str() {
+        "n" | "noun" => "noun",
+        "v" | "vb" | "verb" => "verb",
+        "adj" | "a" | "adjective" => "adjective",
+        "adv" | "adverb" => "adverb",
+        "prep" | "preposition" => "preposition",
+        "conj" | "conjunction" => "conjunction",
+        "pron" | "pronoun" => "pronoun",
+        "interj" | "int" | "interjection" => "interjection",
+        "det" | "determiner" => "determiner",
+        "abbr" | "abbreviation" => "abbreviation",
+        "phrase" | "phr" | "idiom" => "phrase",
+        _ => return None,
+    })
 }
 
 fn field(fields: &[String], index: usize) -> Option<String> {
@@ -212,6 +260,47 @@ mod tests {
         assert_eq!(words.len(), 2);
         assert_eq!(words[0].term, "ephemeral");
         assert!(words[0].definition.is_none());
+    }
+
+    #[test]
+    fn a_bare_list_may_tag_each_word_with_a_part_of_speech() {
+        let words = parse_csv("nonchalant adj\nprofoundly adv\ndefy v\nanalogy n\n");
+        let tagged: Vec<_> = words
+            .iter()
+            .map(|w| (w.term.as_str(), w.part_of_speech.as_deref()))
+            .collect();
+        assert_eq!(
+            tagged,
+            [
+                ("nonchalant", Some("adjective")),
+                ("profoundly", Some("adverb")),
+                ("defy", Some("verb")),
+                ("analogy", Some("noun")),
+            ]
+        );
+        assert!(words[0].definition.is_none());
+    }
+
+    #[test]
+    fn a_tagged_multi_word_term_keeps_its_head() {
+        let words = parse_csv("at large phrase\n");
+        assert_eq!(words[0].term, "at large");
+        assert_eq!(words[0].part_of_speech.as_deref(), Some("phrase"));
+    }
+
+    #[test]
+    fn an_untagged_multi_word_term_is_left_alone() {
+        let words = parse_csv("ad hoc\nfait accompli\n");
+        assert_eq!(words[0].term, "ad hoc");
+        assert!(words[0].part_of_speech.is_none());
+        assert_eq!(words[1].term, "fait accompli");
+    }
+
+    #[test]
+    fn a_real_column_beats_a_trailing_tag() {
+        let words = parse_csv("run v,to move quickly,,verb");
+        assert_eq!(words[0].term, "run v");
+        assert_eq!(words[0].part_of_speech.as_deref(), Some("verb"));
     }
 
     #[test]

@@ -104,6 +104,35 @@ Exit codes: `0` success, `1` error, `2` not found / nothing to show,
 
 Waybar users: see [doc/waybar.md](doc/waybar.md).
 
+## Importing a word list
+
+Import takes JSON or CSV, and CSV is deliberately forgiving -- a plain list of
+words is a valid file:
+
+```
+nonchalant adj
+at large phrase
+laconic
+frugal,using few words
+```
+
+Line by line: a word with a part-of-speech tag, a multi-word term with one, a
+bare word, and a full CSV row. An optional
+`term,definition,example,part_of_speech` header is recognised and skipped.
+
+A trailing `n`, `v`, `adj`, `adv`, `prep`, `conj`, `pron`, `interj`, `det`,
+`abbr` or `phrase` is read as a part of speech and expanded (`adj` ->
+`adjective`). It is only split off when the line has no other column, so a term
+that merely ends in a short word survives intact.
+
+The tag is not decoration: it decides which sense Wordbar shows. `haphazard
+adv` picks the adverb sense rather than the more common adjective, where the
+dictionary has one. Definitions are always left to the lookup -- supply them
+only if you want your own.
+
+Duplicates are skipped, never overwritten, and a bad row can't abort the
+import; the CLI reports all three counts.
+
 ## Importing from a Kindle
 
 The Kindle's Vocabulary Builder keeps every word you looked up in

@@ -88,7 +88,7 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] editing a word updates it and the panel picks the change up
 - [ ] deleting asks first, then removes the word
 - [ ] a word captured from the Shell appears in the list without a manual reload
-- [ ] import accepts `word`, `word,definition` and the full CSV row
+- [ ] import accepts `word`, `word pos`, `word,definition` and the full CSV row
 - [ ] export writes JSON or CSV depending on the chosen filename
 - [ ] with the service unreachable, the window shows an error toast rather than hanging
 - [ ] the editor's sense chooser fills the fields, and Save keeps the choice

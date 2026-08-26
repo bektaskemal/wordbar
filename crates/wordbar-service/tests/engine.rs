@@ -657,3 +657,37 @@ fn an_explicit_refresh_does_replace_the_definition() {
         Some("Lasting a short time.")
     );
 }
+
+#[test]
+fn an_imported_part_of_speech_steers_which_sense_is_shown() {
+    use wordbar_service::engine::Enrichment;
+
+    let mut e = engine();
+    let id = e
+        .add_word_full(
+            wordbar_core::NewWord {
+                term: "haphazard".into(),
+                part_of_speech: Some("adverb".into()),
+                ..Default::default()
+            },
+            t0(),
+        )
+        .unwrap()
+        .value
+        .id;
+
+    e.apply_enrichment_with(
+        id,
+        &entry(&[
+            ("adjective", "Not planned.", None),
+            ("adverb", "At random.", None),
+        ]),
+        t0(),
+        Enrichment::FillGaps,
+    )
+    .unwrap();
+
+    let word = e.get_word(id).unwrap();
+    assert_eq!(word.definition.as_deref(), Some("At random."));
+    assert_eq!(word.part_of_speech.as_deref(), Some("adverb"));
+}
