@@ -456,13 +456,20 @@ impl WordbarService {
     }
 
     /// Import portable vocabulary. Returns `(added, duplicates, invalid)`.
+    ///
+    /// An empty `format` means "you decide": the caller had a filename that
+    /// did not say, so the content is sniffed here rather than in each client.
     async fn import_vocabulary(
         &self,
         data: &str,
         format: &str,
     ) -> Result<(u32, u32, u32), ServiceError> {
-        let format = Format::parse(format)
-            .ok_or_else(|| ServiceError::InvalidTerm("format must be json or csv".into()))?;
+        let format = if format.trim().is_empty() {
+            Format::sniff(data)
+        } else {
+            Format::parse(format)
+                .ok_or_else(|| ServiceError::InvalidTerm("format must be json or csv".into()))?
+        };
         let (report, needing_lookup) = {
             let mut engine = self.engine.lock().await;
             exchange::import(&mut engine, data, format, Utc::now())?

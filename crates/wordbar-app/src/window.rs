@@ -764,7 +764,7 @@ impl Ui {
         let dialog = gtk::FileDialog::builder()
             .title("Import vocabulary")
             .build();
-        dialog.set_filters(Some(&exchange_filters()));
+        dialog.set_filters(Some(&import_filters()));
 
         let ui = Rc::clone(self);
         dialog.open(Some(&self.window), gio::Cancellable::NONE, move |result| {
@@ -804,7 +804,11 @@ impl Ui {
         dialog.save(Some(&self.window), gio::Cancellable::NONE, move |result| {
             let Ok(file) = result else { return };
             let Some(path) = file.path() else { return };
-            let format = format_for(&path);
+            // Nothing to sniff when writing, so an unnamed format is JSON.
+            let format = match format_for(&path) {
+                "" => "json",
+                named => named,
+            };
             glib::spawn_future_local(async move {
                 match ui.client.export("all", format).await {
                     Ok(data) => match std::fs::write(&path, data) {
@@ -854,7 +858,25 @@ fn clamp(child: &impl IsA<gtk::Widget>) -> adw::Clamp {
 }
 
 fn exchange_filters() -> gio::ListStore {
+    exchange_filters_with_text(false)
+}
+
+/// The import dialog also accepts a plain word list, which is usually `.txt`.
+fn import_filters() -> gio::ListStore {
+    exchange_filters_with_text(true)
+}
+
+fn exchange_filters_with_text(include_text: bool) -> gio::ListStore {
     let filters = gio::ListStore::new::<gtk::FileFilter>();
+
+    if include_text {
+        let any = gtk::FileFilter::new();
+        any.set_name(Some("Word lists"));
+        any.add_suffix("txt");
+        any.add_suffix("csv");
+        any.add_suffix("json");
+        filters.append(&any);
+    }
 
     let json = gtk::FileFilter::new();
     json.set_name(Some("JSON"));
@@ -869,10 +891,14 @@ fn exchange_filters() -> gio::ListStore {
     filters
 }
 
+/// The format to ask the service for. An unrecognised extension yields `""`,
+/// which tells the service to sniff the content -- a word list is as often
+/// `.txt` as `.csv`.
 fn format_for(path: &std::path::Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case("csv") => "csv",
-        _ => "json",
+        Some(ext) if ext.eq_ignore_ascii_case("json") => "json",
+        _ => "",
     }
 }
 

@@ -25,12 +25,15 @@ impl Format {
         }
     }
 
-    /// Guess from a filename, defaulting to JSON.
-    pub fn from_path(path: &str) -> Self {
-        if path.to_lowercase().ends_with(".csv") {
-            Self::Csv
-        } else {
-            Self::Json
+    /// Guess the format from the content, for a file whose name did not say.
+    ///
+    /// A hand-written word list is as likely to be `words.txt` as `words.csv`,
+    /// and reading one as JSON fails outright -- so anything that does not
+    /// open like JSON is treated as the forgiving format.
+    pub fn sniff(data: &str) -> Self {
+        match data.trim_start().chars().next() {
+            Some('[') | Some('{') => Self::Json,
+            _ => Self::Csv,
         }
     }
 }
@@ -253,6 +256,15 @@ fn escape_csv(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unnamed_format_is_sniffed_from_the_content() {
+        assert_eq!(Format::sniff("nonchalant adj\n"), Format::Csv);
+        assert_eq!(Format::sniff("laconic\n"), Format::Csv);
+        assert_eq!(Format::sniff("  [{\"term\":\"a\"}]"), Format::Json);
+        assert_eq!(Format::sniff("{}"), Format::Json);
+        assert_eq!(Format::sniff(""), Format::Csv);
+    }
 
     #[test]
     fn csv_accepts_term_only_rows() {

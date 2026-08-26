@@ -414,11 +414,14 @@ async fn run(cli: Cli) -> zbus::Result<i32> {
                 std::fs::read_to_string(&path)
                     .map_err(|e| zbus::Error::Failure(format!("{path}: {e}")))?
             };
+            // An unrecognised extension is left to the service, which sniffs
+            // the content -- a word list is as often `.txt` as `.csv`.
             let format = format.unwrap_or_else(|| {
-                if path.to_lowercase().ends_with(".csv") {
-                    "csv".into()
-                } else {
-                    "json".into()
+                let lower = path.to_lowercase();
+                match () {
+                    _ if lower.ends_with(".csv") => "csv".into(),
+                    _ if lower.ends_with(".json") => "json".into(),
+                    _ => String::new(),
                 }
             });
             let (added, duplicates, invalid) = wordbar.import_vocabulary(&data, &format).await?;
