@@ -63,6 +63,18 @@ export const WordCard = GObject.registerClass({
         });
         this._speaker.connect('clicked', () => this.emit('speak-requested'));
         header.add_child(this._speaker);
+
+        // Editing opens the manager. The card is where a wrong definition or a
+        // missing example is noticed, so the way to fix one belongs here even
+        // though the fixing happens elsewhere.
+        this._edit = new St.Button({
+            style_class: 'wordbar-icon-button',
+            child: new St.Icon({icon_name: 'document-edit-symbolic', icon_size: 16}),
+            y_align: Clutter.ActorAlign.CENTER,
+            can_focus: true,
+        });
+        this._edit.connect('clicked', () => this.emit('edit-requested'));
+        header.add_child(this._edit);
         this.add_child(header);
 
         // Part of speech, plus a switcher when the dictionary gave more than
@@ -234,6 +246,7 @@ export const WordCard = GObject.registerClass({
             this._example.visible = false;
             this._addDefinition.visible = false;
             this._speaker.visible = false;
+            this._edit.visible = false;
             // Hidden, not greyed out: there is nothing to rate, and a dimmed
             // pair of buttons still reads as something you failed to use.
             this._actions.visible = false;
@@ -243,6 +256,7 @@ export const WordCard = GObject.registerClass({
 
         this._actions.visible = true;
         this._addWord.visible = false;
+        this._edit.visible = true;
 
         this._term.text = word.term;
 
