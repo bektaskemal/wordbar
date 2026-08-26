@@ -11,6 +11,7 @@ Four layers, tested independently (Phase 27).
 | display selector | `crates/wordbar-core/src/select.rs` |
 | dictionary parsing | `crates/wordbar-service/src/dict/free_dictionary.rs` |
 | import/export | `crates/wordbar-service/src/exchange.rs` |
+| lookup retries | `crates/wordbar-service/src/enrich.rs`, `scripts/e2e-retry.sh` |
 
 ## 2. Storage and engine — `cargo test -p wordbar-service`
 
@@ -89,6 +90,7 @@ nested Shell cannot verify the global capture shortcut.
 - [ ] deleting asks first, then removes the word
 - [ ] a word captured from the Shell appears in the list without a manual reload
 - [ ] import accepts `word`, `word pos`, `word,definition` and the full CSV row
+- [ ] a word imported while the dictionary is down gets its definition once it is back
 - [ ] export writes JSON or CSV depending on the chosen filename
 - [ ] with the service unreachable, the window shows an error toast rather than hanging
 - [ ] the editor's sense chooser fills the fields, and Save keeps the choice

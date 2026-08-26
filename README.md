@@ -93,6 +93,7 @@ wordbarctl know                    # FSRS Good, then advance
 wordbarctl learned                 # archive, then advance
 wordbarctl restore ephemeral
 wordbarctl refresh ephemeral       # look it up again
+wordbarctl refresh --missing       # only the words with no definition
 wordbarctl refresh --all           # backfill senses after an upgrade
 wordbarctl list --known
 wordbarctl export --all > vocabulary.json
@@ -132,6 +133,25 @@ only if you want your own.
 
 Duplicates are skipped, never overwritten, and a bad row can't abort the
 import; the CLI reports all three counts.
+
+## When a lookup fails
+
+Definitions come from [dictionaryapi.dev](https://dictionaryapi.dev), which
+needs no key and is occasionally down. A lookup that fails is not lost: every
+one goes through a single worker that keeps what it could not finish and tries
+again, backing off from 15 seconds to half an hour so an outage is retried
+twice an hour rather than hammered. Words still missing a definition are picked
+up again when the service starts, so an outage that outlasts a logout is
+covered too.
+
+A word the dictionary *answers* about but does not have -- a typo, a name, a
+phrase -- is not retried on a timer, since the answer would not change. Those
+show up in the manager's incomplete list, and fixing the spelling queues a
+fresh lookup. To force one:
+
+```bash
+wordbarctl refresh --missing
+```
 
 ## Importing from a Kindle
 

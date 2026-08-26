@@ -6,6 +6,7 @@
 pub mod dbus;
 pub mod dict;
 pub mod engine;
+pub mod enrich;
 pub mod exchange;
 pub mod paths;
 pub mod speech;

@@ -10,14 +10,13 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use tokio::sync::Mutex;
-use wordbar_core::{
-    DictionaryProvider, Error as CoreError, Rating, Word, WordFilter, WordId, WordPatch,
-};
+use wordbar_core::{DictionaryProvider, Error as CoreError, Rating, Word, WordFilter, WordPatch};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::{interface, Connection, DBusError};
 
 use crate::engine::{Effects, Engine, Outcome};
+use crate::enrich;
 use crate::exchange::{self, Format};
 
 pub const BUS_NAME: &str = "org.wordbar.Wordbar";
@@ -69,6 +68,9 @@ pub struct WordbarService {
     engine: Arc<Mutex<Engine>>,
     dictionary: Arc<dyn DictionaryProvider>,
     connection: Connection,
+    /// Every lookup goes through here, so a failed one is retried rather than
+    /// lost. See [`crate::enrich`].
+    enricher: enrich::Handle,
     /// Woken by `Quit`, so the service can be stopped from the panel.
     shutdown: Arc<tokio::sync::Notify>,
 }
@@ -80,50 +82,23 @@ impl WordbarService {
         connection: Connection,
         shutdown: Arc<tokio::sync::Notify>,
     ) -> Self {
+        let enricher = enrich::spawn(
+            Arc::clone(&engine),
+            Arc::clone(&dictionary),
+            connection.clone(),
+        );
         Self {
             engine,
             dictionary,
             connection,
+            enricher,
             shutdown,
         }
     }
 
-    fn emitter(&self) -> zbus::Result<SignalEmitter<'static>> {
-        SignalEmitter::new(&self.connection, OBJECT_PATH)
-    }
-
     /// Publish whatever the engine reported.
     async fn publish(&self, effects: &Effects) {
-        let emitter = match self.emitter() {
-            Ok(e) => e,
-            Err(err) => {
-                tracing::warn!(%err, "cannot build signal emitter");
-                return;
-            }
-        };
-        if let Some(id) = effects.word_added {
-            let _ = Self::word_added(&emitter, id).await;
-        }
-        if let Some(id) = effects.word_updated {
-            let _ = Self::word_updated(&emitter, id).await;
-        }
-        if effects.vocabulary_changed {
-            let _ = Self::vocabulary_changed(&emitter).await;
-        }
-        if let Some(current) = effects.current_word_changed {
-            let dict = match current {
-                Some(id) => {
-                    let engine = self.engine.lock().await;
-                    let now = Utc::now();
-                    engine
-                        .get_word(id)
-                        .map(|w| word_dict_with_card(&engine, &w, now))
-                        .unwrap_or_default()
-                }
-                None => WordDict::new(),
-            };
-            let _ = Self::current_word_changed(&emitter, dict).await;
-        }
+        publish(&self.connection, &self.engine, effects).await;
     }
 
     /// Apply an outcome: publish its effects, return its value.
@@ -142,115 +117,43 @@ impl WordbarService {
             }
         }
     }
-
-    /// Kick off best-effort enrichment. Never awaited by the caller, so a slow
-    /// or failing network cannot delay a capture.
-    fn spawn_enrichment(&self, id: WordId, term: String) {
-        let engine = Arc::clone(&self.engine);
-        let dictionary = Arc::clone(&self.dictionary);
-        let connection = self.connection.clone();
-
-        tokio::spawn(async move {
-            let entry = match dictionary.lookup(&term).await {
-                Ok(Some(entry)) => entry,
-                Ok(None) => {
-                    tracing::debug!(%term, "no dictionary entry");
-                    return;
-                }
-                Err(err) => {
-                    tracing::info!(%term, %err, "dictionary lookup failed; word kept as-is");
-                    return;
-                }
-            };
-
-            let effects = {
-                let mut engine = engine.lock().await;
-                // The word may have been deleted while we were on the network.
-                match engine.apply_enrichment_with(
-                    id,
-                    &entry,
-                    Utc::now(),
-                    crate::engine::Enrichment::FillGaps,
-                ) {
-                    Ok(outcome) => outcome.effects,
-                    Err(err) => {
-                        tracing::info!(id, %err, "enrichment update skipped");
-                        return;
-                    }
-                }
-            };
-
-            if let (Ok(emitter), Some(updated)) = (
-                SignalEmitter::new(&connection, OBJECT_PATH),
-                effects.word_updated,
-            ) {
-                let _ = Self::word_updated(&emitter, updated).await;
-                let _ = Self::vocabulary_changed(&emitter).await;
-            }
-        });
-    }
 }
 
-impl WordbarService {
-    /// Look up many words in the background, one at a time.
-    ///
-    /// Sequential and paced on purpose: an import can be hundreds of words,
-    /// and firing that many requests at a free dictionary API at once would be
-    /// rude and would mostly earn rate limiting.
-    fn spawn_bulk_enrichment(&self, ids: Vec<WordId>) {
-        if ids.is_empty() {
+/// Turn engine effects into D-Bus signals.
+///
+/// A free function rather than a method because the enrichment worker has
+/// effects to publish too, and signals should be emitted from exactly one
+/// place.
+pub(crate) async fn publish(connection: &Connection, engine: &Mutex<Engine>, effects: &Effects) {
+    let emitter = match SignalEmitter::new(connection, OBJECT_PATH) {
+        Ok(e) => e,
+        Err(err) => {
+            tracing::warn!(%err, "cannot build signal emitter");
             return;
         }
-
-        let engine = Arc::clone(&self.engine);
-        let dictionary = Arc::clone(&self.dictionary);
-        let connection = self.connection.clone();
-
-        tokio::spawn(async move {
-            tracing::info!(count = ids.len(), "looking up imported words");
-            for id in ids {
-                let term = {
-                    let engine = engine.lock().await;
-                    match engine.get_word(id) {
-                        Ok(word) => word.term.clone(),
-                        // Deleted while the queue was draining.
-                        Err(_) => continue,
-                    }
-                };
-
-                match dictionary.lookup(&term).await {
-                    Ok(Some(entry)) => {
-                        let effects = {
-                            let mut engine = engine.lock().await;
-                            match engine.apply_enrichment_with(
-                                id,
-                                &entry,
-                                Utc::now(),
-                                crate::engine::Enrichment::FillGaps,
-                            ) {
-                                Ok(outcome) => outcome.effects,
-                                Err(err) => {
-                                    tracing::info!(id, %err, "enrichment skipped");
-                                    continue;
-                                }
-                            }
-                        };
-                        if let (Ok(emitter), Some(updated)) = (
-                            SignalEmitter::new(&connection, OBJECT_PATH),
-                            effects.word_updated,
-                        ) {
-                            let _ = Self::word_updated(&emitter, updated).await;
-                            let _ = Self::vocabulary_changed(&emitter).await;
-                        }
-                    }
-                    Ok(None) => tracing::debug!(%term, "no dictionary entry"),
-                    Err(err) => tracing::info!(%term, %err, "lookup failed"),
-                }
-
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    };
+    if let Some(id) = effects.word_added {
+        let _ = WordbarService::word_added(&emitter, id).await;
+    }
+    if let Some(id) = effects.word_updated {
+        let _ = WordbarService::word_updated(&emitter, id).await;
+    }
+    if effects.vocabulary_changed {
+        let _ = WordbarService::vocabulary_changed(&emitter).await;
+    }
+    if let Some(current) = effects.current_word_changed {
+        let dict = match current {
+            Some(id) => {
+                let engine = engine.lock().await;
+                let now = Utc::now();
+                engine
+                    .get_word(id)
+                    .map(|w| word_dict_with_card(&engine, &w, now))
+                    .unwrap_or_default()
             }
-            tracing::info!("finished looking up imported words");
-        });
+            None => WordDict::new(),
+        };
+        let _ = WordbarService::current_word_changed(&emitter, dict).await;
     }
 }
 
@@ -265,7 +168,7 @@ impl WordbarService {
         };
         let word = outcome.value.clone();
         self.publish(&outcome.effects).await;
-        self.spawn_enrichment(word.id, word.term.clone());
+        self.enricher.request(word.id);
         Ok(self.dict(Some(&word)).await)
     }
 
@@ -374,11 +277,23 @@ impl WordbarService {
             // Not editable by hand: it is dictionary metadata, not content.
             audio_url: None,
         };
-        let outcome = {
+        let (outcome, renamed) = {
             let mut engine = self.engine.lock().await;
-            engine.update_word(id, patch, Utc::now())?
+            let before = engine.get_word(id)?.term;
+            let outcome = engine.update_word(id, patch, Utc::now())?;
+            let renamed = outcome.value.term != before;
+            (outcome, renamed)
         };
         let word = self.settle(outcome).await;
+
+        // Correcting a misspelling is the usual reason a word is renamed, and
+        // the old spelling is exactly why the lookup found nothing. Ask again
+        // under the new one -- but only while there is still a gap to fill, so
+        // editing a definition by hand does not summon the dictionary.
+        if renamed && word.is_incomplete() {
+            self.enricher.request(word.id);
+        }
+
         Ok(self.dict(Some(&word)).await)
     }
 
@@ -477,7 +392,7 @@ impl WordbarService {
 
         // An imported list is usually bare words, so look them up just as a
         // capture does. Without this an import stayed definitionless forever.
-        self.spawn_bulk_enrichment(needing_lookup);
+        self.enricher.request_all(needing_lookup);
         self.publish(&Effects {
             vocabulary_changed: report.added > 0,
             ..Effects::default()

@@ -43,9 +43,10 @@ test-extension:
 dev: build
 	./scripts/dev-shell.sh
 
-## e2e: prove the backend over a private session bus (Phase 10)
+## e2e: prove the backend, and lookup retries, over a private session bus
 e2e: build
 	./scripts/e2e-backend.sh $(TARGETDIR)
+	./scripts/e2e-retry.sh $(TARGETDIR)
 
 ## lint: formatting and clippy
 lint:

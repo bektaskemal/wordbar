@@ -105,11 +105,14 @@ enum Command {
 
     /// Look a word up again, refreshing its senses and pronunciation.
     Refresh {
-        /// Term or id. Omit with --all to refresh everything.
+        /// Term or id. Omit with --all or --missing.
         target: Option<String>,
         /// Refresh every word, for backfilling after an upgrade.
         #[arg(long)]
         all: bool,
+        /// Refresh only the words that still have no definition.
+        #[arg(long, conflicts_with = "all")]
+        missing: bool,
     },
 
     /// Show vocabulary counts.
@@ -353,13 +356,21 @@ async fn run(cli: Cli) -> zbus::Result<i32> {
             }
         }
 
-        Command::Refresh { target, all } => {
-            let ids: Vec<i64> = if all {
+        Command::Refresh {
+            target,
+            all,
+            missing,
+        } => {
+            let ids: Vec<i64> = if all || missing {
                 wordbar
                     .list_words("all", "")
                     .await?
                     .iter()
                     .filter_map(Word::from_dict)
+                    // `--missing` is the common case after an outage: looking
+                    // every word up again is slow and would replace
+                    // definitions that are already fine.
+                    .filter(|w| !missing || w.definition.as_deref().unwrap_or("").trim().is_empty())
                     .map(|w| w.id)
                     .collect()
             } else {
@@ -368,6 +379,11 @@ async fn run(cli: Cli) -> zbus::Result<i32> {
                     None => return Ok(exit::NOT_FOUND),
                 }
             };
+
+            if ids.is_empty() && missing {
+                println!("Every word has a definition");
+                return Ok(exit::OK);
+            }
 
             let mut refreshed = 0;
             let mut failed = 0;

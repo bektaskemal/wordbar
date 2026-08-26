@@ -277,13 +277,17 @@ impl Engine {
 
     /// Active words with no definition yet, either because enrichment failed
     /// or because they were captured offline.
-    pub fn count_incomplete(&self) -> Result<usize> {
+    pub fn list_incomplete(&self) -> Result<Vec<Word>> {
         Ok(self
             .store
             .list_words(WordFilter::Active)?
-            .iter()
-            .filter(|w| w.is_incomplete())
-            .count())
+            .into_iter()
+            .filter(Word::is_incomplete)
+            .collect())
+    }
+
+    pub fn count_incomplete(&self) -> Result<usize> {
+        Ok(self.list_incomplete()?.len())
     }
 
     pub fn stats(&self) -> Result<Stats> {
