@@ -247,11 +247,38 @@ fn deleting_the_current_word_selects_another_one() {
     let b = add(&mut e, "ubiquitous");
 
     let current = e.current_word(t0()).unwrap().value.unwrap().id;
-    e.delete_word(current).unwrap();
+    e.delete_word(current, t0()).unwrap();
 
     let next = e.current_word(t0()).unwrap().value.unwrap().id;
     assert_ne!(next, current);
     assert!(next == a || next == b);
+}
+
+#[test]
+fn deleting_the_current_word_announces_the_next_one() {
+    let mut e = engine();
+    add(&mut e, "ephemeral");
+    add(&mut e, "ubiquitous");
+
+    let current = e.current_word(t0()).unwrap().value.unwrap().id;
+    let outcome = e.delete_word(current, t0()).unwrap();
+
+    // The panel only reacts to the signal; announcing "no word" here leaves
+    // it on its empty state although other words are still in rotation.
+    let next = e.current_word_id().unwrap().expect("a replacement word");
+    assert_ne!(next, current);
+    assert_eq!(outcome.effects.current_word_changed, Some(Some(next)));
+}
+
+#[test]
+fn deleting_the_last_word_empties_the_panel() {
+    let mut e = engine();
+    let id = add(&mut e, "ephemeral");
+
+    let outcome = e.delete_word(id, t0()).unwrap();
+
+    assert_eq!(outcome.effects.current_word_changed, Some(None));
+    assert!(e.current_word(t0()).unwrap().value.is_none());
 }
 
 #[test]
@@ -442,7 +469,7 @@ fn senses_go_when_the_word_does() {
     e.apply_enrichment(id, &entry(&[("noun", "A thing.", None)]), t0())
         .unwrap();
 
-    e.delete_word(id).unwrap();
+    e.delete_word(id, t0()).unwrap();
     assert!(e.list_senses(id).unwrap().is_empty());
 }
 

@@ -254,7 +254,7 @@ impl WordbarService {
     async fn delete_word(&self, id: i64) -> Result<(), ServiceError> {
         let outcome = {
             let mut engine = self.engine.lock().await;
-            engine.delete_word(id)?
+            engine.delete_word(id, Utc::now())?
         };
         self.settle(outcome).await;
         Ok(())

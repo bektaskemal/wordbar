@@ -321,7 +321,7 @@ impl Engine {
         Ok(Outcome::new(word, effects))
     }
 
-    pub fn delete_word(&mut self, id: WordId) -> Result<Outcome<()>> {
+    pub fn delete_word(&mut self, id: WordId, now: DateTime<Utc>) -> Result<Outcome<()>> {
         let was_current = self.store.current_word_id()? == Some(id);
         self.store.delete_word(id)?;
         let mut effects = Effects {
@@ -329,7 +329,11 @@ impl Engine {
             ..Effects::default()
         };
         if was_current {
+            // Move straight on: the panel only reacts to the signal, so
+            // announcing "no word" would strand it on its empty state while
+            // other words are still in rotation.
             effects.current_word_changed = Some(None);
+            effects = effects.merge(self.advance_display(now)?.effects);
         }
         Ok(Outcome::new((), effects))
     }
